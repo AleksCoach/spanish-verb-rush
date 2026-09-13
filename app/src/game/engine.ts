@@ -32,6 +32,8 @@ export type RoundState = {
   bossHits: Partial<Record<Person, number>>
   current: Question | null
   counter: number
+  /** znacznik startu rundy (ms) — do czasu trwania w panelu rodzica */
+  startedAt: number
 }
 
 export type SubmitResult = {
@@ -160,6 +162,7 @@ export function newRound(level: LevelDef, stats: Record<string, ItemStat>, rng: 
     bossHits: {},
     current: null,
     counter: 0,
+    startedAt: Date.now(),
   }
   return advance(state, level, stats, rng)
 }

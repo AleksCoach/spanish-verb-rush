@@ -3,11 +3,13 @@ import { EXAM_LEVEL, LEVELS, isPassed, isUnlocked, nextLevelToPlay } from '../da
 import { VERB_BY_INF } from '../data/verbs'
 import { dayKey } from '../game/activity'
 import type { SaveData } from '../game/types'
+import { ParentLink } from './ParentLink'
 import { Stars } from './common'
 import { useEnterKey } from './useEnterKey'
 
 type Props = {
   save: SaveData
+  profileId: string
   playerName: string
   onPlay: (levelId: number) => void
   onToggleSound: () => void
@@ -15,7 +17,7 @@ type Props = {
   onLogout: () => void
 }
 
-export function Home({ save, playerName, onPlay, onToggleSound, onReset, onLogout }: Props) {
+export function Home({ save, profileId, playerName, onPlay, onToggleSound, onReset, onLogout }: Props) {
   const next = nextLevelToPlay(save)
   const btn = useRef<HTMLButtonElement>(null)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -119,6 +121,8 @@ export function Home({ save, playerName, onPlay, onToggleSound, onReset, onLogou
           )
         })}
       </section>
+
+      <ParentLink profileId={profileId} playerName={playerName} />
 
       <footer className="home-foot">
         <button type="button" className="link" onClick={onToggleSound}>

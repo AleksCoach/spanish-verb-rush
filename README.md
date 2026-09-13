@@ -27,9 +27,14 @@ Gra webowa do nauki odmiany hiszpańskich czasowników w **Presente de indicativ
 
 Egzamin jest dostępny zawsze. Następny poziom odblokowuje się po 70% poprawnych odpowiedzi, a jefe da się zawsze pokonać.
 
-## Zapis postępu
+## Zapis postępu i panel rodzica
 
-Profile, postęp i dzienna aktywność (czas aktywny liczony do 5 s bez ruchu, liczba przykładów, poprawność) są zapisane w `localStorage` przeglądarki, na tym urządzeniu, na którym się gra. Nie ma jeszcze backendu ani panelu rodzica (etap 2). PIN tylko chroni przed przypadkowym graniem na cudzym profilu, nie jest zabezpieczeniem danych.
+Profile, postęp i dzienna aktywność są zapisane w `localStorage` przeglądarki, na tym urządzeniu, na którym się gra. Dzienna aktywność to czas aktywny liczony tylko do 5 s bez ruchu, liczba przykładów i poprawność. PIN gracza chroni tylko przed przypadkowym graniem na cudzym profilu.
+
+**Panel rodzica:** https://alekscoach.github.io/spanish-verb-rush/#panel
+- Na ekranie startowym gry dziecko wybiera „📡 połącz z panelem rodzica” i wpisuje kod rodzica. Bez kodu gra nic nie wysyła.
+- Połączona gra co minutę wysyła do Supabase aktywność minuta po minucie, sumy dzienne i wyniki rund. Odbywa się to wyłącznie przez funkcje RPC (`app/supabase/schema.sql`), a tabele mają RLS bez polityk.
+- Panel pokazuje dla wybranego dnia: czas nauki, przykłady, poprawność, tempo, sesje z godzinami, 7 dni wstecz, rundy i egzaminy. Wejście wymaga kodu rodzica i PIN-u rodzica (ustawianego przy pierwszym wejściu). Po 8 błędnych PIN-ach następuje blokada na 15 minut.
 
 ## Dla dewelopera
 

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
+import { Panel } from './panel/Panel'
 // czcionki wbudowane w grę — zero zapytań do zewnętrznych serwerów (Family Link: jeden zatwierdzony adres)
 import '@fontsource/rubik/latin-400.css'
 import '@fontsource/rubik/latin-ext-400.css'
@@ -14,6 +15,6 @@ import './styles.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {window.location.hash.startsWith('#panel') ? <Panel /> : <App />}
   </StrictMode>,
 )

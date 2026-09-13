@@ -6,6 +6,7 @@ import { Play } from './components/Play'
 import type { StatUpdate } from './components/Play'
 import { Summary } from './components/Summary'
 import { LEVEL_BY_ID, MAX_LEVEL, isUnlocked } from './data/levels'
+import { cloudActiveSecond, cloudAnswer, cloudRound, persistCloud, syncCloud, uuid } from './cloud/sync'
 import { IDLE_LIMIT_MS, addActivity, answerPatch } from './game/activity'
 import { summarize } from './game/engine'
 import type { RoundState, Summary as SummaryData } from './game/engine'
@@ -28,6 +29,10 @@ export default function App() {
   })
   const [screen, setScreen] = useState<Screen>({ name: 'home' })
   const saveRef = useRef(save)
+  const profileRef = useRef(profile)
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
   const runRef = useRef(0)
 
   useEffect(() => {
@@ -52,6 +57,7 @@ export default function App() {
       lastInputRef.current = Date.now()
     }
     const flush = () => {
+      persistCloud(profile.id)
       const sec = pendingSecRef.current
       if (!sec) return
       pendingSecRef.current = 0
@@ -61,11 +67,22 @@ export default function App() {
     }
     const tick = window.setInterval(() => {
       const visible = document.visibilityState === 'visible'
-      if (visible && Date.now() - lastInputRef.current <= IDLE_LIMIT_MS) pendingSecRef.current += 1
+      if (visible && Date.now() - lastInputRef.current <= IDLE_LIMIT_MS) {
+        pendingSecRef.current += 1
+        cloudActiveSecond(profile.id)
+      }
       if (pendingSecRef.current >= 15 || (!visible && pendingSecRef.current > 0)) flush()
     }, 1000)
+    // wysyłka do panelu rodzica co minutę (tylko gdy profil połączony kodem rodzica)
+    const sync = window.setInterval(() => {
+      void syncCloud(profile.id, saveRef.current, profile.name)
+    }, 60_000)
+    void syncCloud(profile.id, saveRef.current, profile.name)
     const onHide = () => {
-      if (document.visibilityState === 'hidden') flush()
+      if (document.visibilityState === 'hidden') {
+        flush()
+        void syncCloud(profile.id, saveRef.current, profile.name, true)
+      }
     }
     const events = ['keydown', 'pointerdown', 'touchstart', 'input'] as const
     events.forEach((e) => window.addEventListener(e, mark, { capture: true, passive: true }))
@@ -74,6 +91,7 @@ export default function App() {
     return () => {
       flush()
       window.clearInterval(tick)
+      window.clearInterval(sync)
       events.forEach((e) => window.removeEventListener(e, mark, { capture: true }))
       document.removeEventListener('visibilitychange', onHide)
       window.removeEventListener('pagehide', flush)
@@ -110,6 +128,7 @@ export default function App() {
       }
       return update ? addActivity(next, answerPatch(update.grade)) : next
     })
+    if (update && profileRef.current) cloudAnswer(profileRef.current.id, update.grade)
   }, [])
 
   const onFinish = useCallback((round: RoundState) => {
@@ -139,6 +158,22 @@ export default function App() {
         { rounds: 1, passed: summary.passed ? 1 : 0 },
       ),
     )
+    const p = profileRef.current
+    if (p) {
+      cloudRound(p.id, {
+        id: uuid(),
+        finishedAt: new Date().toISOString(),
+        levelKey: level.key,
+        levelName: level.kind === 'exam' ? 'EGZAMIN' : level.code,
+        levelKind: level.kind,
+        score: summary.score,
+        stars: summary.stars,
+        answers: summary.total,
+        correct: summary.ok,
+        durationSec: Math.round((Date.now() - round.startedAt) / 1000),
+      })
+      window.setTimeout(() => void syncCloud(p.id, saveRef.current, p.name), 1500)
+    }
     setScreen({ name: 'summary', levelId: level.id, summary, unlockedNow })
   }, [])
 
@@ -164,6 +199,7 @@ export default function App() {
       {screen.name === 'home' && (
         <Home
           save={save}
+          profileId={profile.id}
           playerName={profile.name}
           onPlay={openIntro}
           onToggleSound={toggleSound}

@@ -15,6 +15,8 @@ let player: HTMLAudioElement | null = null
 let queue: Item[] = []
 let current: { item: Item; index: number } | null = null
 let captionListener: ((text: string | null) => void) | null = null
+// każde nowe nagranie i każda pauza unieważnia stare play() — ich spóźnione błędy nie ruszają kolejki
+let playToken = 0
 const bags = new Map<string, string[]>()
 
 export async function loadVoiceManifest(): Promise<void> {
@@ -38,7 +40,10 @@ export function setCommentatorEnabled(on: boolean): void {
   enabled = on
   if (!on) {
     queue = queue.filter((i) => i.word)
-    if (current && !current.item.word) stopCurrent()
+    if (current && !current.item.word) {
+      stopCurrent()
+      startNext()
+    }
   }
 }
 
@@ -58,6 +63,7 @@ function getPlayer(): HTMLAudioElement | null {
 
 function stopCurrent(): void {
   // samo pause — bez czyszczenia src, żeby nie wywołać „error” i przeskoku kolejki
+  playToken += 1
   getPlayer()?.pause()
   current = null
   captionListener?.(null)
@@ -66,8 +72,11 @@ function stopCurrent(): void {
 function playFile(): void {
   const p = getPlayer()
   if (!p || !current) return
+  const token = ++playToken
   p.src = `audio/seg/${current.item.files[current.index]}.mp3`
   p.play().catch(() => {
+    // przerwane pauzą albo następnym nagraniem, zanim zagrało — już obsłużone
+    if (token !== playToken) return
     // autoodtwarzanie zablokowane (brak interakcji) albo brak pliku — pomijamy kwestię
     current = null
     captionListener?.(null)

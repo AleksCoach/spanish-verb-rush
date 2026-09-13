@@ -5,6 +5,7 @@ import { advance, newRound, submit, summarize } from '../game/engine'
 import type { RoundState, SubmitResult } from '../game/engine'
 import { accentDiffs, applyAccentShortcuts, grade } from '../game/grading'
 import { sfx } from '../game/sound'
+import { sayWord, stopSpeaking } from '../game/speech'
 import { itemKey } from '../game/storage'
 import type { Grade, ItemStat, LevelDef, Question } from '../game/types'
 import { Decomposition, EndingsRow, FormsTable, GroupChip, VerbWord, fmtPoints } from './common'
@@ -76,6 +77,16 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   useEffect(() => {
     if (!splashes.length) inputRef.current?.focus()
   }, [round.counter, splashes.length, feedback])
+
+  // każde nowe pytanie: przeczytaj słówko po polsku i po hiszpańsku (zanim gracz odpowie)
+  const questionN = round.current?.n
+  const questionVerb = round.current?.verb
+  useEffect(() => {
+    if (questionN === undefined || !questionVerb || splashes.length) return
+    sayWord(questionVerb, VERB_BY_INF[questionVerb].meaning)
+  }, [questionN, questionVerb, splashes.length])
+
+  useEffect(() => () => stopSpeaking(), [])
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -306,6 +317,7 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
       <>
         {tags}
         <p className="plaque-sentence">{q.wrongSentence}</p>
+        <WordMeaning verb={q.verb} withInfinitive />
         <p className="plaque-hint">Znajdź zły czasownik i wpisz poprawną formę</p>
       </>
     )
@@ -316,9 +328,29 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
       <div className="plaque-verb">
         <VerbWord verb={q.verb} colored={level.groupHint} />
       </div>
-      {level.kind !== 'exam' && <div className="plaque-meaning">{v.meaning}</div>}
+      <WordMeaning verb={q.verb} />
       <div className="plaque-person">{PERSON_LABEL[q.person]}</div>
     </>
+  )
+}
+
+/** tłumaczenie słówka + przycisk, żeby posłuchać jeszcze raz */
+function WordMeaning({ verb, withInfinitive = false }: { verb: string; withInfinitive?: boolean }) {
+  const v = VERB_BY_INF[verb]
+  return (
+    <div className="plaque-meaning">
+      <span>{withInfinitive ? `${v.infinitive} = ${v.meaning}` : v.meaning}</span>
+      <button
+        type="button"
+        className="say-again"
+        aria-label="Posłuchaj słówka"
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => sayWord(v.infinitive, v.meaning)}
+      >
+        🔊
+      </button>
+    </div>
   )
 }
 

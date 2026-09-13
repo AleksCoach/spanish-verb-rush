@@ -34,6 +34,19 @@ export function speak(segs: Seg[], onEnd?: () => void): void {
   })
 }
 
+/** tekst do czytania: bez ukośników i nawiasów ("iść / jechać" → "iść albo jechać") */
+export function speakable(text: string): string {
+  return text.split(' / ').join(' albo ').split('/').join(' albo ').split('(').join(', ').split(')').join('')
+}
+
+/** słówko przy pytaniu: najpierw po polsku, potem po hiszpańsku */
+export function sayWord(infinitive: string, meaning: string): void {
+  speak([
+    { lang: 'pl', text: speakable(meaning) },
+    { lang: 'es', text: infinitive },
+  ])
+}
+
 export function stopSpeaking(): void {
   if (canSpeak()) window.speechSynthesis.cancel()
 }

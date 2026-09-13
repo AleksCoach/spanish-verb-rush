@@ -364,9 +364,32 @@ kbd {
 }
 
 .plaque-meaning {
-  font-size: 15px;
-  font-style: italic;
-  color: var(--plaque-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: clamp(20px, 5.6vw, 25px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: #33458c;
+}
+
+.say-again {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: #e3e9fb;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.say-again:active {
+  transform: scale(0.94);
 }
 
 .plaque-person {
@@ -2098,7 +2121,7 @@ kbd {
   }
 
   .plaque-meaning {
-    font-size: 13px;
+    font-size: 18px;
   }
 
   .combo {

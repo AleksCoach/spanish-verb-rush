@@ -121,9 +121,7 @@ export function sheetFor(level: LevelDef): Sheet {
     case 'egzamin':
       return {
         title: 'Egzamin próbny',
-        rule: 'Wszystko z Kompetencji 1: regularne, zwrotne i nieregularne.',
-        endingsTable: { persons: ['yo', 'tu', 'el', 'nosotros', 'vosotros', 'ellos'] },
-        pronouns: true,
+        rule: 'Wszystko z Kompetencji 1: regularne (-ar, -er, -ir), zwrotne (-se) i nieregularne. Bez podpowiedzi — tabelki trzeba mieć w głowie.',
         tip: `Nieregularne: ${EXAM_IRREGULAR.join(', ')}`,
         speech: [
           pl('Egzamin próbny. Dwadzieścia pytań z całego materiału, bez podpowiedzi. Brak akcentu to pół punktu. Powodzenia!'),

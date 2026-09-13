@@ -79,12 +79,14 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   }, [round.counter, splashes.length, feedback])
 
   // każde nowe pytanie: przeczytaj słówko po polsku i po hiszpańsku (zanim gracz odpowie)
+  // (egzamin: bez podpowiedzi — nic nie czytamy w trakcie; w poprawie błędów po egzaminie już tak)
   const questionN = round.current?.n
   const questionVerb = round.current?.verb
+  const examQuestion = isExam && round.current?.phase === 'main'
   useEffect(() => {
-    if (questionN === undefined || !questionVerb || splashes.length) return
+    if (questionN === undefined || !questionVerb || splashes.length || examQuestion) return
     sayWord(questionVerb, VERB_BY_INF[questionVerb].meaning)
-  }, [questionN, questionVerb, splashes.length])
+  }, [questionN, questionVerb, splashes.length, examQuestion])
 
   useEffect(() => () => stopSpeaking(), [])
 
@@ -256,7 +258,15 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
               onChange={(e) => {
                 if (!feedback) setInput(applyAccentShortcuts(e.target.value))
               }}
-              placeholder={q.kind === 'fix' ? 'poprawna forma…' : VERB_BY_INF[q.verb].reflexive ? 'zaimek + forma…' : 'wpisz formę…'}
+              placeholder={
+                isExam && q.phase === 'main'
+                  ? 'wpisz odpowiedź…'
+                  : q.kind === 'fix'
+                    ? 'poprawna forma…'
+                    : VERB_BY_INF[q.verb].reflexive
+                      ? 'zaimek + forma…'
+                      : 'wpisz formę…'
+              }
               aria-label="Twoja odpowiedź"
               autoComplete="off"
               autoCorrect="off"
@@ -317,7 +327,7 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
       <>
         {tags}
         <p className="plaque-sentence">{q.wrongSentence}</p>
-        <WordMeaning verb={q.verb} withInfinitive />
+        {!(level.kind === 'exam' && q.phase === 'main') && <WordMeaning verb={q.verb} withInfinitive />}
         <p className="plaque-hint">Znajdź zły czasownik i wpisz poprawną formę</p>
       </>
     )
@@ -328,7 +338,7 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
       <div className="plaque-verb">
         <VerbWord verb={q.verb} colored={level.groupHint} />
       </div>
-      <WordMeaning verb={q.verb} />
+      {!(level.kind === 'exam' && q.phase === 'main') && <WordMeaning verb={q.verb} />}
       <div className="plaque-person">{PERSON_LABEL[q.person]}</div>
     </>
   )

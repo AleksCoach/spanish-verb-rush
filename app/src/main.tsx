@@ -2,6 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { Panel } from './panel/Panel'
+import { loadVoiceManifest } from './game/voice'
+
+void loadVoiceManifest()
 // czcionki wbudowane w grę — zero zapytań do zewnętrznych serwerów (Family Link: jeden zatwierdzony adres)
 import '@fontsource/rubik/latin-400.css'
 import '@fontsource/rubik/latin-ext-400.css'

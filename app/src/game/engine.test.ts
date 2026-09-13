@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sheetFor } from '../data/cheatsheets'
+import { LINES, LINES_BY_CAT, displayText, segmentsOf } from '../data/commentary'
 import { EXAM_IRREGULAR, EXAM_LEVEL, LEVELS, isUnlocked, nextLevelToPlay } from '../data/levels'
 import { PERSONS, REFLEXIVE_VERBS, VERBS, VERB_BY_INF, ruleForm } from '../data/verbs'
 import { advance, examPlan, makeQuestion, newRound, schoolGrade, submit, summarize } from './engine'
@@ -235,6 +236,31 @@ describe('silnik rundy', () => {
     const wrong = submit(s, level, stats, 'zzz', rng)
     expect(wrong.state.combo).toBe(0)
     expect(wrong.state.bestCombo).toBe(5)
+  })
+})
+
+describe('komentatorzy', () => {
+  it('każda kwestia dzieli się na fragmenty PL/ES, napisy bez znaczników', () => {
+    for (const line of LINES) {
+      const segs = segmentsOf(line)
+      expect(segs.length, line.id).toBeGreaterThan(0)
+      for (const seg of segs) expect(seg.text.trim().length, line.id).toBeGreaterThan(0)
+      expect(displayText(line).includes('{'), line.id).toBe(false)
+    }
+    expect(segmentsOf({ id: 'x', cat: 'x', text: 'Teraz {es:tú!} Czasowniki' })).toEqual([
+      { lang: 'pl', text: 'Teraz' },
+      { lang: 'es', text: 'tú!' },
+      { lang: 'pl', text: 'Czasowniki' },
+    ])
+  })
+
+  it('są kwestie dla każdego poziomu, czasownika-jefe i słówka', () => {
+    for (const level of LEVELS) expect(LINES_BY_CAT[`intro-${level.key}`]?.length, level.key).toBeGreaterThan(0)
+    for (const v of VERBS) {
+      expect(LINES_BY_CAT[`word-pl-${v.infinitive}`]?.length, v.infinitive).toBe(1)
+      expect(LINES_BY_CAT[`word-es-${v.infinitive}`]?.length, v.infinitive).toBe(1)
+      if (v.type === 'irregular') expect(LINES_BY_CAT[`hint-irr-${v.infinitive}`]?.length, v.infinitive).toBeGreaterThan(0)
+    }
   })
 })
 

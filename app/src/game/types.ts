@@ -104,6 +104,8 @@ export type SaveData = {
   levels: Record<string, LevelBest>
   stats: Record<string, ItemStat>
   sound: boolean
+  /** komentator Toni (nagrania) */
+  commentator: boolean
   /** historia egzaminów próbnych (ostatnie 20) */
   exams: ExamResult[]
   /** aktywność per dzień, klucz RRRR-MM-DD */

@@ -6,6 +6,9 @@ import type { SaveData } from '../game/types'
 import { ParentLink } from './ParentLink'
 import { Stars } from './common'
 import { useEnterKey } from './useEnterKey'
+import { comment } from '../game/voice'
+
+let welcomed = false
 
 type Props = {
   save: SaveData
@@ -13,11 +16,12 @@ type Props = {
   playerName: string
   onPlay: (levelId: number) => void
   onToggleSound: () => void
+  onToggleCommentator: () => void
   onReset: () => void
   onLogout: () => void
 }
 
-export function Home({ save, profileId, playerName, onPlay, onToggleSound, onReset, onLogout }: Props) {
+export function Home({ save, profileId, playerName, onPlay, onToggleSound, onToggleCommentator, onReset, onLogout }: Props) {
   const next = nextLevelToPlay(save)
   const btn = useRef<HTMLButtonElement>(null)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -28,6 +32,7 @@ export function Home({ save, profileId, playerName, onPlay, onToggleSound, onRes
 
   useEffect(() => {
     btn.current?.focus()
+    if (!welcomed) welcomed = comment('welcome')
   }, [])
   useEnterKey(() => onPlay(next.id), !confirmReset)
 
@@ -127,6 +132,9 @@ export function Home({ save, profileId, playerName, onPlay, onToggleSound, onRes
       <footer className="home-foot">
         <button type="button" className="link" onClick={onToggleSound}>
           {save.sound ? '🔊 dźwięk: wł.' : '🔇 dźwięk: wył.'}
+        </button>
+        <button type="button" className="link" onClick={onToggleCommentator}>
+          {save.commentator ? '🎙️ komentator: wł.' : '🎙️ komentator: wył.'}
         </button>
         {confirmReset ? (
           <span className="reset-confirm">

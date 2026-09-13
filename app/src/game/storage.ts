@@ -33,7 +33,7 @@ function write(key: string, value: unknown): void {
 }
 
 export function emptySave(): SaveData {
-  return { version: 2, xp: 0, bestCombo: 0, levels: {}, stats: {}, sound: true, exams: [], activity: {} }
+  return { version: 2, xp: 0, bestCombo: 0, levels: {}, stats: {}, sound: true, commentator: true, exams: [], activity: {} }
 }
 
 type SaveV1 = {

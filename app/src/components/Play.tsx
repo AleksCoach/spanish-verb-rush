@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { PERSONS, PERSON_LABEL, PERSON_SHORT, REFLEXIVE_PRONOUN, VERB_BY_INF } from '../data/verbs'
+import { LINES_BY_CAT } from '../data/commentary'
+import { ENDINGS, PERSONS, PERSON_LABEL, PERSON_SHORT, REFLEXIVE_PRONOUN, VERB_BY_INF, stemOf } from '../data/verbs'
 import { advance, newRound, submit, summarize } from '../game/engine'
 import type { RoundState, SubmitResult } from '../game/engine'
-import { accentDiffs, applyAccentShortcuts, grade } from '../game/grading'
+import { accentDiffs, applyAccentShortcuts, clean, grade } from '../game/grading'
 import { sfx } from '../game/sound'
-import { sayWord, stopSpeaking } from '../game/speech'
+import { stopSpeaking } from '../game/speech'
+import { comment, playWord, stopVoice } from '../game/voice'
 import { itemKey } from '../game/storage'
 import type { Grade, ItemStat, LevelDef, Question } from '../game/types'
 import { Decomposition, EndingsRow, FormsTable, GroupChip, VerbWord, fmtPoints } from './common'
@@ -54,9 +56,16 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     if (next.xp !== round.xp) onProgress(next.xp - round.xp, next.combo, null)
     const queue: Splash[] = []
     if (feedback.bossDefeated) queue.push('boss')
-    if (level.kind === 'exam' && round.phase === 'main' && next.phase !== 'main') queue.push('exam')
+    if (level.kind === 'exam' && round.phase === 'main' && next.phase !== 'main') {
+      queue.push('exam')
+      const grade = summarize(next, level).exam?.grade.value
+      if (grade) comment(`exam-grade-${grade}`, { interrupt: true })
+    }
     // egzamin: ekran wyniku ma już przycisk POPRAW BŁĘDY — bez drugiego ekranu
-    if (level.kind !== 'exam' && round.phase === 'main' && next.phase === 'recovery') queue.push('recovery')
+    if (level.kind !== 'exam' && round.phase === 'main' && next.phase === 'recovery') {
+      queue.push('recovery')
+      comment('recovery')
+    }
     setRound(next)
     setFeedback(null)
     setInput('')
@@ -85,10 +94,16 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   const examQuestion = isExam && round.current?.phase === 'main'
   useEffect(() => {
     if (questionN === undefined || !questionVerb || splashes.length || examQuestion) return
-    sayWord(questionVerb, VERB_BY_INF[questionVerb].meaning)
+    playWord(questionVerb, VERB_BY_INF[questionVerb].meaning)
   }, [questionN, questionVerb, splashes.length, examQuestion])
 
-  useEffect(() => () => stopSpeaking(), [])
+  useEffect(
+    () => () => {
+      stopSpeaking()
+      stopVoice()
+    },
+    [],
+  )
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -115,6 +130,19 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     setFeedback({ ...res, at: Date.now() })
 
     const g = res.record.grade
+    // komentator (w egzaminie milczy do wyniku)
+    if (!(isExam && q.phase === 'main')) {
+      const combo = res.comboMilestone ?? 0
+      if (res.bossDefeated) {
+        if (!comment(`boss-defeated-${level.bossVerb}`)) comment('boss-defeated')
+      } else if (g === 'wrong') comment(hintCategory(q, input), { cuttable: true })
+      else if (g === 'almost') comment('almost', { cuttable: true })
+      else if (res.fixedError) comment('fixed')
+      else if (combo >= 10 && combo % 5 === 0) comment('combo10')
+      else if (combo === 5) comment('combo5')
+      else if (combo === 3) comment('combo3')
+    }
+
     if (isExam && q.phase === 'main') sfx.tick()
     else if (res.bossDefeated) sfx.victory()
     else if (g === 'wrong') sfx.wrong()
@@ -310,6 +338,31 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   )
 }
 
+const PRONOUNS = ['me', 'te', 'se', 'nos', 'os']
+
+/** Rodzaj błędu → kategoria podpowiedzi komentatora */
+function hintCategory(q: Question, input: string): string {
+  const v = VERB_BY_INF[q.verb]
+  if (q.kind === 'fix') return 'hint-fix'
+  if (v.type === 'irregular') return LINES_BY_CAT[`hint-irr-${v.infinitive}`] ? `hint-irr-${v.infinitive}` : 'hint-generic'
+  const first = clean(input).split(' ')[0] ?? ''
+  if (v.reflexive) {
+    const bare = q.answer.split(' ').slice(1).join(' ')
+    if (!PRONOUNS.includes(first) && grade(input, bare) !== 'wrong') return 'hint-refl-missing'
+    if (PRONOUNS.includes(first) && first !== REFLEXIVE_PRONOUN[q.person]) return 'hint-refl-pronoun'
+  }
+  const stem = stemOf(q.verb)
+  const prefix = v.reflexive ? `${REFLEXIVE_PRONOUN[q.person]} ` : ''
+  if ((q.person === 'nosotros' || q.person === 'vosotros') && v.group !== 'ar') {
+    const other = v.group === 'er' ? 'ir' : 'er'
+    if (grade(input, prefix + stem + ENDINGS[other][q.person]) !== 'wrong') return 'hint-er-ir'
+  }
+  for (const g of ['ar', 'er', 'ir'] as const) {
+    if (g !== v.group && grade(input, prefix + stem + ENDINGS[g][q.person]) !== 'wrong') return 'hint-group'
+  }
+  return Math.random() < 0.7 ? `hint-person-${q.person}` : 'hint-generic'
+}
+
 function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
   const v = VERB_BY_INF[q.verb]
   const tags = (
@@ -356,7 +409,7 @@ function WordMeaning({ verb, withInfinitive = false }: { verb: string; withInfin
         aria-label="Posłuchaj słówka"
         tabIndex={-1}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => sayWord(v.infinitive, v.meaning)}
+        onClick={() => playWord(v.infinitive, v.meaning)}
       >
         🔊
       </button>

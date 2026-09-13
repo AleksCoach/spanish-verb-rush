@@ -11,6 +11,7 @@ import { IDLE_LIMIT_MS, addActivity, answerPatch } from './game/activity'
 import { summarize } from './game/engine'
 import type { RoundState, Summary as SummaryData } from './game/engine'
 import { setSoundEnabled } from './game/sound'
+import { onCaption, setCommentatorEnabled } from './game/voice'
 import { clearSave, emptySave, getActiveProfile, loadSave, setActiveProfile, writeSave } from './game/storage'
 import type { Profile } from './game/storage'
 import type { LevelBest, SaveData } from './game/types'
@@ -43,6 +44,16 @@ export default function App() {
   useEffect(() => {
     setSoundEnabled(save.sound)
   }, [save.sound])
+
+  useEffect(() => {
+    setCommentatorEnabled(save.commentator)
+  }, [save.commentator])
+
+  const [caption, setCaption] = useState<string | null>(null)
+  useEffect(() => {
+    onCaption(setCaption)
+    return () => onCaption(null)
+  }, [])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -178,6 +189,7 @@ export default function App() {
   }, [])
 
   const toggleSound = useCallback(() => setSave((s) => ({ ...s, sound: !s.sound })), [])
+  const toggleCommentator = useCallback(() => setSave((s) => ({ ...s, commentator: !s.commentator })), [])
 
   const reset = useCallback(() => {
     if (!profile) return
@@ -203,6 +215,7 @@ export default function App() {
           playerName={profile.name}
           onPlay={openIntro}
           onToggleSound={toggleSound}
+          onToggleCommentator={toggleCommentator}
           onReset={reset}
           onLogout={logout}
         />
@@ -232,6 +245,11 @@ export default function App() {
           onReplay={() => (screen.summary.passed ? play(screen.levelId) : openIntro(screen.levelId))}
           onHome={goHome}
         />
+      )}
+      {caption && (
+        <div className="caption" role="status">
+          <span aria-hidden="true">🎙️</span> {caption}
+        </div>
       )}
     </main>
   )

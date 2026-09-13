@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { sheetFor } from '../data/cheatsheets'
 import { ENDINGS, GROUP_LABEL, PERSON_SHORT } from '../data/verbs'
 import { canSpeak, speak, stopSpeaking } from '../game/speech'
+import { stopVoice } from '../game/voice'
 import type { Group, LevelDef, Person } from '../game/types'
 import { Decomposition, FormsTable, PronounTable, VerbWord } from './common'
 
@@ -20,6 +21,7 @@ export function CheatSheet({ level }: { level: LevelDef }) {
       return
     }
     setSpeaking(true)
+    stopVoice()
     speak(sheet.speech, () => setSpeaking(false))
   }
 

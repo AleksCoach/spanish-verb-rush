@@ -3,6 +3,7 @@ import { VERB_BY_INF } from '../data/verbs'
 import type { LevelDef } from '../game/types'
 import { CheatSheet } from './CheatSheet'
 import { useEnterKey } from './useEnterKey'
+import { comment } from '../game/voice'
 
 type Props = {
   level: LevelDef
@@ -15,6 +16,9 @@ export function Intro({ level, onStart, onBack }: Props) {
   useEffect(() => {
     btn.current?.focus()
   }, [])
+  useEffect(() => {
+    comment(`intro-${level.key}`, { interrupt: true, cuttable: true })
+  }, [level.key])
   useEnterKey(onStart)
 
   const boss = level.bossVerb ? VERB_BY_INF[level.bossVerb] : null

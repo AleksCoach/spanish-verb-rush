@@ -5,6 +5,7 @@ import type { Summary as SummaryData } from '../game/engine'
 import type { ExamResult, LevelDef } from '../game/types'
 import { Stars, fmtPoints } from './common'
 import { useEnterKey } from './useEnterKey'
+import { comment } from '../game/voice'
 
 type Props = {
   level: LevelDef
@@ -32,6 +33,15 @@ export function Summary({ level, summary, unlockedNow, canNext, exams, onNext, o
   useEffect(() => {
     mountedAt.current = Date.now()
     primary.current?.focus()
+  }, [])
+  useEffect(() => {
+    if (level.kind === 'exam') {
+      const prev = exams.length >= 2 ? exams[exams.length - 2].score : null
+      if (prev !== null && summary.score > prev) comment('exam-better')
+      return
+    }
+    comment(unlockedNow ? 'unlocked' : `summary-${summary.stars}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const guarded = (fn: () => void) => () => {
     if (Date.now() - mountedAt.current > GUARD_MS) fn()

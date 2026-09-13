@@ -1,0 +1,10 @@
+# Lokalne pliki robocze — nie publikujemy (specyfikacja zawiera dane dziecka)
+SPANISH_VERB_RUSH_EXECUTION_SPEC_v0.1.md
+SPANISH_VERB_RUSH_EXECUTION_SPEC_v0.1.json
+GRAJ_Spanish_Verb_Rush.html
+.claude/
+
+# build / zależności
+app/node_modules/
+app/dist/
+app/dist-single/

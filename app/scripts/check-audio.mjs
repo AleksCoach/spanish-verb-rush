@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LINES, segmentsOf } from '../src/data/commentary.ts'
+import { VOICE_LINES } from './voice-lines.mjs'
 
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DOCS = join(APP, '..', 'docs', 'audio')
@@ -12,8 +12,8 @@ const hash = (voice, lang, text) => createHash('sha1').update(`${voice}|${m.mode
 
 const rows = []
 const seen = new Set()
-for (const line of LINES) {
-  for (const s of segmentsOf(line)) {
+for (const line of VOICE_LINES) {
+  for (const s of line.segments) {
     const h = hash(s.lang === 'es' ? m.esVoice : m.plVoice, s.lang, s.text)
     if (seen.has(h)) continue
     seen.add(h)

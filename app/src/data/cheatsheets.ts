@@ -1,5 +1,6 @@
 import type { LevelDef, Person } from '../game/types'
 import { EXAM_IRREGULAR } from './levels'
+import { SPOKEN_MEANING } from './commentary'
 import { PERSON_SHORT, VERB_BY_INF } from './verbs'
 
 /** fragment do czytania na głos: po polsku albo po hiszpańsku */
@@ -39,9 +40,8 @@ export function sheetFor(level: LevelDef): Sheet {
           { verb: 'vivir', person: 'yo' },
         ],
         speech: [
-          pl('Osoba'), es('yo.'),
-          pl('Odcinasz końcówkę bezokolicznika i dopisujesz o. Na przykład:'),
-          es('hablar, hablo. Comer, como. Vivir, vivo.'),
+          pl('Pierwsza osoba, czyli ja. Odcinasz końcówkę bezokolicznika i dopisujesz literę o. Posłuchaj:'),
+          es('Hablar: yo hablo. Comer: yo como. Vivir: yo vivo.'),
         ],
       }
     case 'tu':
@@ -55,9 +55,8 @@ export function sheetFor(level: LevelDef): Sheet {
         ],
         tip: 'Pamiętaj z poprzedniego poziomu: yo → -o',
         speech: [
-          pl('Osoba'), es('tú.'),
-          pl('Czasowniki na a r dostają a s. Czasowniki na e r i i r dostają e s. Na przykład:'),
-          es('hablas, comes, vives.'),
+          pl('Druga osoba, czyli ty. Czasowniki na ar dostają końcówkę as, a czasowniki na er i ir końcówkę es. Posłuchaj:'),
+          es('Hablar: tú hablas. Comer: tú comes. Vivir: tú vives.'),
         ],
       }
     case 'mix':
@@ -71,9 +70,8 @@ export function sheetFor(level: LevelDef): Sheet {
         ],
         endingsTable: { persons: ['yo', 'tu', 'el'], highlight: ['el'] },
         speech: [
-          pl('Osoba'), es('él, ella.'),
-          pl('Tak jak przy tú, tylko bez s na końcu. Na przykład:'),
-          es('habla, come, vive.'),
+          pl('Trzecia osoba, czyli on albo ona. Tak jak przy drugiej osobie, tylko bez litery s na końcu. Posłuchaj:'),
+          es('Él habla. Ella come. Él vive.'),
         ],
       }
     case 'full-team':
@@ -83,10 +81,8 @@ export function sheetFor(level: LevelDef): Sheet {
         endingsTable: { persons: ['yo', 'tu', 'el', 'nosotros', 'vosotros', 'ellos'], highlight: ['nosotros', 'vosotros'] },
         tip: 'vosotros ma akcent: -áis · -éis · -ís',
         speech: [
-          pl('Teraz wszystkie osoby. Uważaj na'), es('nosotros'), pl('i'), es('vosotros.'),
-          pl('Tu czasowniki na e r i i r się różnią:'),
-          es('comemos, vivimos. Coméis, vivís.'),
-          pl('I pamiętaj o akcencie w'), es('vosotros.'),
+          pl('Teraz wszystkie osoby. Czasowniki na er i ir różnią się tylko w dwóch z nich. Posłuchaj i zwróć uwagę na akcent:'),
+          es('Nosotros comemos, nosotros vivimos. Vosotros coméis, vosotros vivís.'),
         ],
       }
     case 'mixed-verbs':
@@ -97,7 +93,7 @@ export function sheetFor(level: LevelDef): Sheet {
         fixExample: { wrong: 'Yo hablas español.', right: 'Yo hablo español.', answer: 'hablo' },
         tip: 'Napraw błąd: podmiot (yo, tú…) mówi, jaka ma być końcówka.',
         speech: [
-          pl('Teraz nie ma kolorowej podpowiedzi. Najpierw sprawdź, czy czasownik kończy się na a r, e r czy i r. Potem dobierz końcówkę do osoby.'),
+          pl('Teraz nie ma kolorowej podpowiedzi. Najpierw sprawdź, czy czasownik kończy się na ar, er czy ir. Potem dobierz końcówkę do osoby.'),
           pl('Nowe zadanie: napraw błąd. Na przykład:'), es('Yo hablas español.'),
           pl('Poprawnie:'), es('Yo hablo español.'),
         ],
@@ -113,9 +109,8 @@ export function sheetFor(level: LevelDef): Sheet {
         ],
         tip: 'Bez zaimka to błąd: „levanto” ✗ → „me levanto” ✓',
         speech: [
-          pl('Czasowniki zwrotne kończą się na s e. Przed czasownikiem stawiasz zaimek:'),
-          es('me, te, se, nos, os, se.'),
-          pl('Na przykład:'), es('me levanto. Nos levantamos.'),
+          pl('Czasowniki zwrotne kończą się na se. Przed czasownikiem stawiasz zaimek, a końcówka jest taka jak zwykle. Posłuchaj:'),
+          es('Yo me levanto. Tú te levantas. Él se levanta. Nosotros nos levantamos. Vosotros os levantáis. Ellos se levantan.'),
         ],
       }
     case 'egzamin':
@@ -146,11 +141,30 @@ export function sheetFor(level: LevelDef): Sheet {
       formsOf: v.infinitive,
       tip: 'Podkreślone formy są nieregularne.',
       speech: [
-        pl('Czasownik'), es(`${v.infinitive}.`), pl(`Po polsku: ${v.meaning}. Posłuchaj form:`),
-        ...(['yo', 'tu', 'el', 'nosotros', 'vosotros', 'ellos'] as Person[]).map((p) => es(`${PERSON_SHORT[p]} ${v.forms[p]}.`)),
+        pl(`Czasownik nieregularny. Po polsku: ${SPOKEN_MEANING[v.infinitive] ?? v.meaning}. Posłuchaj form:`),
+        es(
+          `${v.infinitive.charAt(0).toUpperCase()}${v.infinitive.slice(1)}. ` +
+          (['yo', 'tu', 'el', 'nosotros', 'vosotros', 'ellos'] as Person[])
+            .map((p) => `${PERSON_SHORT[p].charAt(0).toUpperCase()}${PERSON_SHORT[p].slice(1)} ${v.forms[p]}.`)
+            .join(' '),
+        ),
       ],
     }
   }
 
   return { title: level.code, rule: level.desc, speech: [pl(level.desc)] }
+}
+
+/** id nagrania ściągi w audio/manifest.json */
+export const sheetLineId = (level: LevelDef): string => `sheet-${level.key}`
+
+/** ściąga do nagrania i odtwarzania: sąsiednie fragmenty w tym samym języku sklejone (płynniej brzmi) */
+export function sheetSpeech(level: LevelDef): Seg[] {
+  const out: Seg[] = []
+  for (const s of sheetFor(level).speech) {
+    const last = out[out.length - 1]
+    if (last && last.lang === s.lang) last.text = `${last.text} ${s.text}`
+    else out.push({ ...s })
+  }
+  return out
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sheetFor } from '../data/cheatsheets'
+import { sheetFor, sheetSpeech } from '../data/cheatsheets'
 import { LINES, LINES_BY_CAT, displayText, segmentsOf } from '../data/commentary'
 import { EXAM_IRREGULAR, EXAM_LEVEL, LEVELS, isUnlocked, nextLevelToPlay } from '../data/levels'
 import { PERSONS, REFLEXIVE_VERBS, VERBS, VERB_BY_INF, ruleForm } from '../data/verbs'
@@ -272,6 +272,17 @@ describe('ściągi', () => {
       expect(sheet.rule.length, level.key).toBeGreaterThan(0)
       expect(sheet.speech.length, level.key).toBeGreaterThan(0)
       if (level.bossVerb) expect(sheet.formsOf).toBe(level.bossVerb)
+    }
+  })
+
+  it('ściąga do nagrania: języki na zmianę, bez literowania i ukośników', () => {
+    for (const level of LEVELS) {
+      const segs = sheetSpeech(level)
+      segs.forEach((s, i) => {
+        expect(s.text.trim().length, level.key).toBeGreaterThan(0)
+        if (i > 0) expect(s.lang, `${level.key} #${i}`).not.toBe(segs[i - 1].lang)
+        expect(/[aei] r|s e|[/()]/.test(s.text), `${level.key}: ${s.text}`).toBe(false)
+      })
     }
   })
 })

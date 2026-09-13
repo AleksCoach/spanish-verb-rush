@@ -11,6 +11,7 @@ import { IDLE_LIMIT_MS, addActivity, answerPatch } from './game/activity'
 import { summarize } from './game/engine'
 import type { RoundState, Summary as SummaryData } from './game/engine'
 import { setSoundEnabled } from './game/sound'
+import { newerBuild, reloadTo } from './game/update'
 import { onCaption, setCommentatorEnabled } from './game/voice'
 import { clearSave, emptySave, getActiveProfile, loadSave, setActiveProfile, writeSave } from './game/storage'
 import type { Profile } from './game/storage'
@@ -53,6 +54,32 @@ export default function App() {
   useEffect(() => {
     onCaption(setCaption)
     return () => onCaption(null)
+  }, [])
+
+  // nowa wersja gry na serwerze → przeładowanie, gdy gracz jest w menu (nigdy w trakcie rundy)
+  const screenRef = useRef(screen)
+  const pendingBuildRef = useRef<string | null>(null)
+  useEffect(() => {
+    screenRef.current = screen
+    if (screen.name === 'home' && pendingBuildRef.current) reloadTo(pendingBuildRef.current)
+  }, [screen])
+  useEffect(() => {
+    const check = async () => {
+      const id = await newerBuild()
+      if (!id) return
+      pendingBuildRef.current = id
+      if (screenRef.current.name === 'home') reloadTo(id)
+    }
+    void check()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = window.setInterval(() => void check(), 10 * 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {

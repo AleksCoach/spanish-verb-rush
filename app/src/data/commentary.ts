@@ -411,6 +411,9 @@ const WORDS: [infinitive: string, meaning: string][] = [
   ['venir', 'przychodzić'],
 ]
 
+/** znaczenie do czytania na głos (bez ukośników i nawiasów) — też dla ściąg jefe */
+export const SPOKEN_MEANING: Record<string, string> = Object.fromEntries(WORDS)
+
 export type Segment = { lang: 'pl' | 'es'; text: string }
 
 /** 'Teraz {es:tú!} Czasowniki…' → [{es,'tú!'}, {pl,'Czasowniki…'}] — po polsku mówi Polak, po hiszpańsku Hiszpan */

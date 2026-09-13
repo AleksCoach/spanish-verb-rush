@@ -1,35 +1,47 @@
 import { useEffect, useState } from 'react'
-import { sheetFor } from '../data/cheatsheets'
+import { sheetFor, sheetLineId } from '../data/cheatsheets'
 import { ENDINGS, GROUP_LABEL, PERSON_SHORT } from '../data/verbs'
-import { canSpeak, speak, stopSpeaking } from '../game/speech'
-import { stopVoice } from '../game/voice'
+import { hasRecording, loadVoiceManifest, playLine, stopLine } from '../game/voice'
 import type { Group, LevelDef, Person } from '../game/types'
 import { Decomposition, FormsTable, PronounTable, VerbWord } from './common'
 
 const GROUPS: Group[] = ['ar', 'er', 'ir']
 
-/** Ściąga przed poziomem: reguła, przykłady, tabelka — jeden ekran, z opcją czytania na głos (PL/ES). */
+/** Ściąga przed poziomem: reguła, przykłady, tabelka — jeden ekran, z nagraniem do posłuchania (Polak + Hiszpan). */
 export function CheatSheet({ level }: { level: LevelDef }) {
   const sheet = sheetFor(level)
+  const lineId = sheetLineId(level)
+  const [ready, setReady] = useState(() => hasRecording(lineId))
   const [speaking, setSpeaking] = useState(false)
-  useEffect(() => () => stopSpeaking(), [])
+
+  useEffect(() => {
+    if (ready) return
+    let alive = true
+    void loadVoiceManifest().then(() => {
+      if (alive) setReady(hasRecording(lineId))
+    })
+    return () => {
+      alive = false
+    }
+  }, [ready, lineId])
+
+  // wyjście ze ściągi (start rundy, powrót do menu) ucina czytanie
+  useEffect(() => () => stopLine(lineId), [lineId])
 
   const toggleVoice = () => {
     if (speaking) {
-      stopSpeaking()
+      stopLine(lineId)
       setSpeaking(false)
       return
     }
-    setSpeaking(true)
-    stopVoice()
-    speak(sheet.speech, () => setSpeaking(false))
+    if (playLine(lineId, () => setSpeaking(false))) setSpeaking(true)
   }
 
   return (
     <section className="plaque sheet" aria-label="Ściąga">
       <div className="sheet-head">
         <span className="tag tag-sheet">ściąga</span>
-        {canSpeak() && (
+        {ready && (
           <button type="button" className="sheet-voice" onClick={toggleVoice}>
             {speaking ? '■ stop' : '🔊 posłuchaj'}
           </button>

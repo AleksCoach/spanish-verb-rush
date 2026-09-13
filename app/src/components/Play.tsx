@@ -6,7 +6,6 @@ import { advance, newRound, submit, summarize } from '../game/engine'
 import type { RoundState, SubmitResult } from '../game/engine'
 import { accentDiffs, applyAccentShortcuts, clean, grade } from '../game/grading'
 import { sfx } from '../game/sound'
-import { stopSpeaking } from '../game/speech'
 import { comment, playWord, stopVoice } from '../game/voice'
 import { itemKey } from '../game/storage'
 import type { Grade, ItemStat, LevelDef, Question } from '../game/types'
@@ -94,12 +93,11 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   const examQuestion = isExam && round.current?.phase === 'main'
   useEffect(() => {
     if (questionN === undefined || !questionVerb || splashes.length || examQuestion) return
-    playWord(questionVerb, VERB_BY_INF[questionVerb].meaning)
+    playWord(questionVerb)
   }, [questionN, questionVerb, splashes.length, examQuestion])
 
   useEffect(
     () => () => {
-      stopSpeaking()
       stopVoice()
     },
     [],
@@ -409,7 +407,7 @@ function WordMeaning({ verb, withInfinitive = false }: { verb: string; withInfin
         aria-label="Posłuchaj słówka"
         tabIndex={-1}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => playWord(v.infinitive, v.meaning)}
+        onClick={() => playWord(v.infinitive)}
       >
         🔊
       </button>

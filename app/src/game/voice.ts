@@ -1,15 +1,25 @@
 import { LINES_BY_CAT, displayText } from '../data/commentary'
 import type { Line } from '../data/commentary'
-import { sayWord, stopSpeaking } from './speech'
 
-// Komentatorzy z nagrań (ElevenLabs): po hiszpańsku mówi Hiszpan, po polsku Polak.
+// Wszystko, co gra mówi, to nagrania (ElevenLabs): po hiszpańsku mówi Hiszpan, po polsku Polak.
 // Każda kwestia = kilka fragmentów audio/seg/<hash>.mp3 granych po kolei (lista w audio/manifest.json).
-// Gdy nagrań nie ma, komentator milczy, a słówka czyta głos przeglądarki.
+// Bez nagrań gra milczy — żadnego syntezatora mowy z telefonu czy komputera.
 
 type Manifest = { lines: Record<string, string[]> }
-type Item = { lineId: string; files: string[]; caption: string | null; cuttable: boolean; word: boolean }
+type Item = {
+  lineId: string
+  files: string[]
+  caption: string | null
+  /** następne pytanie może przerwać (podpowiedź, ściąga) */
+  cuttable: boolean
+  /** comment = komentator, word = słówko przy pytaniu, line = nagranie na żądanie (ściąga) */
+  kind: 'comment' | 'word' | 'line'
+  /** koniec albo przerwanie tej kwestii */
+  done?: () => void
+}
 
 let manifest: Manifest | null = null
+let loading: Promise<void> | null = null
 let enabled = true
 let player: HTMLAudioElement | null = null
 let queue: Item[] = []
@@ -19,7 +29,7 @@ let captionListener: ((text: string | null) => void) | null = null
 let playToken = 0
 const bags = new Map<string, string[]>()
 
-export async function loadVoiceManifest(): Promise<void> {
+async function fetchManifest(): Promise<void> {
   try {
     const res = await fetch('audio/manifest.json', { cache: 'no-cache' })
     if (!res.ok) return
@@ -30,17 +40,31 @@ export async function loadVoiceManifest(): Promise<void> {
   }
 }
 
+/** wczytuje listę nagrań; po nieudanej próbie następne wywołanie próbuje znowu */
+export function loadVoiceManifest(): Promise<void> {
+  if (manifest) return Promise.resolve()
+  if (!loading) {
+    loading = fetchManifest().finally(() => {
+      loading = null
+    })
+  }
+  return loading
+}
+
 export function voiceReady(): boolean {
   return Boolean(manifest && Object.keys(manifest.lines).length > 0)
 }
 
-const has = (id: string) => Boolean(manifest?.lines[id]?.length)
+/** czy jest nagranie o tym id (np. ściąga poziomu) */
+export function hasRecording(id: string): boolean {
+  return Boolean(manifest?.lines[id]?.length)
+}
 
 export function setCommentatorEnabled(on: boolean): void {
   enabled = on
   if (!on) {
-    queue = queue.filter((i) => i.word)
-    if (current && !current.item.word) {
+    dropQueued((i) => i.kind !== 'comment')
+    if (current?.item.kind === 'comment') {
       stopCurrent()
       startNext()
     }
@@ -61,12 +85,20 @@ function getPlayer(): HTMLAudioElement | null {
   return player
 }
 
+function dropQueued(keep: (i: Item) => boolean): void {
+  const dropped = queue.filter((i) => !keep(i))
+  queue = queue.filter(keep)
+  for (const i of dropped) i.done?.()
+}
+
 function stopCurrent(): void {
   // samo pause — bez czyszczenia src, żeby nie wywołać „error” i przeskoku kolejki
   playToken += 1
   getPlayer()?.pause()
+  const item = current?.item
   current = null
   captionListener?.(null)
+  item?.done?.()
 }
 
 function playFile(): void {
@@ -78,10 +110,16 @@ function playFile(): void {
     // przerwane pauzą albo następnym nagraniem, zanim zagrało — już obsłużone
     if (token !== playToken) return
     // autoodtwarzanie zablokowane (brak interakcji) albo brak pliku — pomijamy kwestię
-    current = null
-    captionListener?.(null)
-    startNext()
+    finishCurrent()
   })
+}
+
+function finishCurrent(): void {
+  const item = current?.item
+  current = null
+  captionListener?.(null)
+  item?.done?.()
+  startNext()
 }
 
 function advance(): void {
@@ -91,16 +129,12 @@ function advance(): void {
     playFile()
     return
   }
-  current = null
-  startNext()
+  finishCurrent()
 }
 
 function startNext(): void {
   const item = queue.shift()
-  if (!item) {
-    captionListener?.(null)
-    return
-  }
+  if (!item) return
   current = { item, index: 0 }
   if (item.caption) captionListener?.(item.caption)
   playFile()
@@ -113,7 +147,7 @@ function enqueue(items: Item[]): void {
 
 /** losowa kwestia z kategorii, bez powtórek aż do wyczerpania puli */
 function pick(cat: string): Line | null {
-  const pool = (LINES_BY_CAT[cat] ?? []).filter((l) => has(l.id))
+  const pool = (LINES_BY_CAT[cat] ?? []).filter((l) => hasRecording(l.id))
   if (!pool.length) return null
   let bag = bags.get(cat)
   if (!bag || !bag.length) {
@@ -133,31 +167,48 @@ export function comment(cat: string, opts: { cuttable?: boolean; interrupt?: boo
   const line = pick(cat)
   if (!line) return false
   if (opts.interrupt) {
-    queue = []
-    stopSpeaking()
+    dropQueued(() => false)
     stopCurrent()
   }
-  enqueue([{ lineId: line.id, files: manifest!.lines[line.id], caption: displayText(line), cuttable: opts.cuttable ?? false, word: false }])
+  enqueue([{ lineId: line.id, files: manifest!.lines[line.id], caption: displayText(line), cuttable: opts.cuttable ?? false, kind: 'comment' }])
   return true
 }
 
 /** słówko przy pytaniu: po polsku (Polak), potem po hiszpańsku (Hiszpan); przerywa podpowiedź, czeka na pochwałę */
-export function playWord(infinitive: string, meaning: string): void {
+export function playWord(infinitive: string): void {
   const pl = `word-pl-${infinitive}`
   const es = `word-es-${infinitive}`
-  if (!voiceReady() || !has(pl) || !has(es)) {
-    sayWord(infinitive, meaning)
+  if (!hasRecording(pl) || !hasRecording(es)) {
+    void loadVoiceManifest() // lista nagrań nie doszła przy starcie — następne pytanie już zagra
     return
   }
-  queue = queue.filter((i) => !i.cuttable && !i.word)
-  if (current && (current.item.cuttable || current.item.word)) stopCurrent()
+  dropQueued((i) => !i.cuttable && i.kind !== 'word')
+  if (current && (current.item.cuttable || current.item.kind === 'word')) stopCurrent()
   enqueue([
-    { lineId: pl, files: manifest!.lines[pl], caption: null, cuttable: true, word: true },
-    { lineId: es, files: manifest!.lines[es], caption: null, cuttable: true, word: true },
+    { lineId: pl, files: manifest!.lines[pl], caption: null, cuttable: true, kind: 'word' },
+    { lineId: es, files: manifest!.lines[es], caption: null, cuttable: true, kind: 'word' },
   ])
 }
 
+/** nagranie na żądanie (ściąga): przerywa wszystko inne; `done` po końcu albo przerwaniu */
+export function playLine(id: string, done?: () => void): boolean {
+  if (!hasRecording(id)) return false
+  dropQueued(() => false)
+  stopCurrent()
+  enqueue([{ lineId: id, files: manifest!.lines[id], caption: null, cuttable: true, kind: 'line', done }])
+  return true
+}
+
+/** zatrzymuje to nagranie, jeśli gra albo czeka w kolejce */
+export function stopLine(id: string): void {
+  dropQueued((i) => i.lineId !== id)
+  if (current?.item.lineId === id) {
+    stopCurrent()
+    startNext()
+  }
+}
+
 export function stopVoice(): void {
-  queue = []
+  dropQueued(() => false)
   stopCurrent()
 }

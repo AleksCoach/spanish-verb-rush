@@ -60,6 +60,7 @@ beforeAll(() => {
           'combo5-01': ['c1', 'c2'],
           'word-pl-hablar': ['pl'],
           'word-es-hablar': ['es'],
+          'sheet-yo': ['s1', 's2'],
         },
       }),
     })),
@@ -86,7 +87,7 @@ describe('komentatorzy — kolejka nagrań', () => {
     // podpowiedź po błędzie (można przerwać) → nowe pytanie czyta słówko od razu
     voice.comment('hint-generic', { cuttable: true })
     expect(file()).toBe('h1.mp3')
-    voice.playWord('hablar', 'mówić')
+    voice.playWord('hablar')
     expect(file()).toBe('pl.mp3')
     FakeAudio.last!.emit('ended')
     expect(file()).toBe('es.mp3')
@@ -95,7 +96,7 @@ describe('komentatorzy — kolejka nagrań', () => {
     // pochwała za serię — słówko czeka, aż się skończy
     voice.comment('combo5')
     expect(file()).toBe('c1.mp3')
-    voice.playWord('hablar', 'mówić')
+    voice.playWord('hablar')
     expect(file()).toBe('c1.mp3')
     FakeAudio.last!.emit('ended')
     expect(file()).toBe('c2.mp3')
@@ -118,7 +119,7 @@ describe('komentatorzy — kolejka nagrań', () => {
     // szybki Enter: podpowiedź jeszcze się nie zaczęła, a już jest nowe pytanie
     voice.comment('hint-generic', { cuttable: true })
     expect(file()).toBe('h1.mp3')
-    voice.playWord('hablar', 'mówić')
+    voice.playWord('hablar')
     await flush()
     expect(file()).toBe('pl.mp3')
     FakeAudio.last!.start()
@@ -137,5 +138,38 @@ describe('komentatorzy — kolejka nagrań', () => {
     FakeAudio.last!.emit('ended')
     expect(file()).toBe('c2.mp3')
     FakeAudio.slow = false
+  })
+
+  it('ściąga z nagrania: przerywa komentarz, zgłasza koniec; bez nagrania gra milczy', async () => {
+    const voice = await import('./voice')
+    voice.stopVoice()
+    let ended = 0
+
+    voice.comment('welcome')
+    expect(voice.playLine('sheet-yo', () => (ended += 1))).toBe(true)
+    expect(file()).toBe('s1.mp3')
+    FakeAudio.last!.emit('ended')
+    expect(file()).toBe('s2.mp3')
+    FakeAudio.last!.emit('ended')
+    expect(ended).toBe(1)
+
+    // stop w trakcie też zgłasza koniec (przycisk wraca do „posłuchaj”)
+    voice.playLine('sheet-yo', () => (ended += 1))
+    voice.stopLine('sheet-yo')
+    expect(ended).toBe(2)
+
+    // start rundy: słówko ucina ściągę
+    voice.playLine('sheet-yo', () => (ended += 1))
+    voice.playWord('hablar')
+    expect(ended).toBe(3)
+    expect(file()).toBe('pl.mp3')
+    voice.stopVoice()
+
+    // brak nagrań → cisza (żadnego sztucznego głosu), nic się nie wysypuje
+    const before = file()
+    expect(voice.playLine('sheet-nie-ma', () => (ended += 1))).toBe(false)
+    voice.playWord('comer')
+    expect(file()).toBe(before)
+    expect(ended).toBe(3)
   })
 })

@@ -1,5 +1,5 @@
-// Nagrania komentatorów (ElevenLabs): po hiszpańsku mówi Hiszpan (Toni), po polsku Polak.
-//   node scripts/generate-voice.mjs licz                               → ile kwestii, fragmentów i znaków (bez API)
+// Nagrania gry (ElevenLabs): komentator Toni, słówka i ściągi — po hiszpańsku mówi Hiszpan, po polsku Polak.
+//   node scripts/generate-voice.mjs licz                               → ile nagrań, fragmentów i znaków + czego brakuje (bez API)
 //   node scripts/generate-voice.mjs probki                             → próbki głosów: docs/probki/index.html
 //   node scripts/generate-voice.mjs wszystko <glosES> <glosPL> [model] → wszystkie nagrania + docs/audio/manifest.json
 // Klucz: app/.env.local (ELEVENLABS_API_KEY=...). Nie trafia do repo.
@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LINES, segmentsOf } from '../src/data/commentary.ts'
+import { VOICE_LINES } from './voice-lines.mjs'
 
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DOCS = join(APP, '..', 'docs')
@@ -161,8 +161,8 @@ async function all(esVoice, plVoice, model = DEFAULT_MODEL) {
   mkdirSync(SEG, { recursive: true })
   const manifest = { esVoice, plVoice, model, lines: {} }
   const jobs = new Map()
-  for (const line of LINES) {
-    manifest.lines[line.id] = segmentsOf(line).map((s) => {
+  for (const { id, segments } of VOICE_LINES) {
+    manifest.lines[id] = segments.map((s) => {
       const voice = s.lang === 'es' ? esVoice : plVoice
       const h = segHash(voice, model, s.lang, s.text)
       if (!existsSync(join(SEG, `${h}.mp3`))) jobs.set(h, { ...s, voice })
@@ -192,17 +192,23 @@ async function all(esVoice, plVoice, model = DEFAULT_MODEL) {
     if (!hashes.every((h) => existsSync(join(SEG, `${h}.mp3`)))) delete manifest.lines[id]
   }
   writeFileSync(join(DOCS, 'audio', 'manifest.json'), JSON.stringify(manifest))
-  console.log(`Gotowe: ${done} nagranych, ${failed} błędów, ${Object.keys(manifest.lines).length}/${LINES.length} kwestii w manifeście`)
+  console.log(`Gotowe: ${done} nagranych, ${failed} błędów, ${Object.keys(manifest.lines).length}/${VOICE_LINES.length} nagrań w manifeście`)
 }
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 const [cmd, a, b, c] = process.argv.slice(2)
 if (cmd === 'licz') {
-  const segs = LINES.flatMap((l) => segmentsOf(l))
-  const uniq = new Set(segs.map((s) => `${s.lang}|${s.text}`))
-  const chars = [...uniq].reduce((n, k) => n + k.length - 3, 0)
-  console.log(`${LINES.length} kwestii, ${segs.length} fragmentów (${uniq.size} unikalnych), ~${chars} znaków`)
+  const segs = VOICE_LINES.flatMap((l) => l.segments)
+  const uniq = new Map(segs.map((s) => [`${s.lang}|${s.text}`, s]))
+  const chars = [...uniq.values()].reduce((n, s) => n + s.text.length, 0)
+  console.log(`${VOICE_LINES.length} nagrań, ${segs.length} fragmentów (${uniq.size} unikalnych), ~${chars} znaków`)
+  const mf = join(DOCS, 'audio', 'manifest.json')
+  if (existsSync(mf)) {
+    const m = JSON.parse(readFileSync(mf, 'utf8'))
+    const missing = [...uniq.values()].filter((s) => !existsSync(join(SEG, `${segHash(s.lang === 'es' ? m.esVoice : m.plVoice, m.model, s.lang, s.text)}.mp3`)))
+    console.log(`Brakuje dla głosów z manifestu: ${missing.length} fragmentów (${missing.reduce((n, s) => n + s.text.length, 0)} znaków)`)
+  }
 } else if (cmd === 'probki') await samples()
 else if (cmd === 'wszystko') await all(a, b, c)
 else console.log('Komendy: licz | probki | wszystko <glosES> <glosPL> [model]')

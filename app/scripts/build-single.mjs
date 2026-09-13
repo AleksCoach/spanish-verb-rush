@@ -1,12 +1,16 @@
 // Skleja build Vite w jeden plik HTML (CSS + JS w środku):
-//  - ../GRAJ_Spanish_Verb_Rush.html  → dwuklik i gra działa, bez serwera i bez npm
-//  - ../docs/index.html               → wersja publikowana na GitHub Pages (link dla gracza)
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+//  - ../docs/index.html          → gra publikowana na GitHub Pages (link dla gracza)
+//  - ../docs/version.json        → numer wersji: otwarta gra sama wykrywa nową i się przeładowuje
+//  - ../GRAJ_Spanish_Verb_Rush.html → skrót na komputer: przenosi do gry w internecie
+//    (nagrania głosów leżą obok gry na serwerze, więc gra z samego pliku byłaby niema)
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+const GAME_URL = 'https://alekscoach.github.io/spanish-verb-rush/'
 const app = join(dirname(fileURLToPath(import.meta.url)), '..')
-const assets = join(app, 'dist', 'assets')
+const dist = join(app, 'dist')
+const assets = join(dist, 'assets')
 const files = readdirSync(assets)
 const jsFile = files.find((f) => f.endsWith('.js'))
 const cssFile = files.find((f) => f.endsWith('.css'))
@@ -32,7 +36,23 @@ const full = `<!doctype html>
 </html>
 `
 
-mkdirSync(join(app, '..', 'docs'), { recursive: true })
-writeFileSync(join(app, '..', 'GRAJ_Spanish_Verb_Rush.html'), full)
-writeFileSync(join(app, '..', 'docs', 'index.html'), full)
-console.log(`OK: GRAJ_Spanish_Verb_Rush.html (${Math.round(full.length / 1024)} KB) + docs/index.html`)
+const shortcut = `<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<title>¡A conjugar!</title>
+<meta http-equiv="refresh" content="0; url=${GAME_URL}" />
+</head>
+<body style="font:18px system-ui,sans-serif;padding:24px">
+<p>Gra jest w internecie: <a href="${GAME_URL}">${GAME_URL}</a></p>
+</body>
+</html>
+`
+
+const docs = join(app, '..', 'docs')
+mkdirSync(docs, { recursive: true })
+writeFileSync(join(docs, 'index.html'), full)
+copyFileSync(join(dist, 'version.json'), join(docs, 'version.json'))
+writeFileSync(join(app, '..', 'GRAJ_Spanish_Verb_Rush.html'), shortcut)
+const { id } = JSON.parse(readFileSync(join(dist, 'version.json'), 'utf8'))
+console.log(`OK: docs/index.html (${Math.round(full.length / 1024)} KB), wersja ${id} + skrót GRAJ_Spanish_Verb_Rush.html`)

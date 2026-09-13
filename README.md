@@ -27,6 +27,17 @@ Gra webowa do nauki odmiany hiszpańskich czasowników w **Presente de indicativ
 
 Egzamin jest dostępny zawsze. Następny poziom odblokowuje się po 70% poprawnych odpowiedzi, a jefe da się zawsze pokonać.
 
+## Głosy
+
+Wszystko, co gra mówi, to nagrania ElevenLabs: po hiszpańsku mówi Hiszpan (Theo), po polsku Polak (Maciek). Nagrania są trzy:
+- komentator Toni;
+- słówko przy każdym pytaniu;
+- ściąga przed poziomem (przycisk „🔊 posłuchaj”).
+
+Gra nie używa syntezatora mowy z telefonu ani komputera. Gdy brakuje nagrań, milczy.
+
+Otwarta gra sama wykrywa nową wersję na serwerze i przeładowuje się, gdy gracz jest w menu.
+
 ## Zapis postępu i panel rodzica
 
 Profile, postęp i dzienna aktywność są zapisane w `localStorage` przeglądarki, na tym urządzeniu, na którym się gra. Dzienna aktywność to czas aktywny liczony tylko do 5 s bez ruchu, liczba przykładów i poprawność. PIN gracza chroni tylko przed przypadkowym graniem na cudzym profilu.
@@ -43,12 +54,16 @@ cd app
 npm install
 npm run dev          # gra lokalnie (otwiera przeglądarkę)
 npm test             # testy silnika, oceniania i danych (vitest)
-npm run build:single # buduje docs/index.html (GitHub Pages) + GRAJ_Spanish_Verb_Rush.html (offline)
+npm run build:single # buduje docs/index.html + docs/version.json (GitHub Pages) i skrót GRAJ_Spanish_Verb_Rush.html
+node scripts/generate-voice.mjs licz   # ile nagrań brakuje (bez API)
+node scripts/generate-voice.mjs wszystko <głosES> <głosPL> eleven_v3   # dogrywa brakujące; klucz w app/.env.local
 ```
 
 Stack: React 19 + TypeScript + Vite, czysty CSS, `localStorage`.
 
 - `app/src/data/verbs.ts` — czasowniki. Formy regularne są liczone z reguły, nieregularne wpisane jawnie, do tego zdania do trybu NAPRAW BŁĄD.
 - `app/src/data/levels.ts` — definicje leveli.
+- `app/src/data/commentary.ts` i `app/src/data/cheatsheets.ts` — kwestie komentatora, słówka i ściągi. To teksty nagrań; znacznik `{es:…}` oznacza fragment, który mówi Hiszpan.
+- `app/src/game/voice.ts` — kolejka nagrań (`docs/audio/manifest.json` + `docs/audio/seg/*.mp3`).
 - `app/src/game/engine.ts` — silnik rundy: adaptacyjny dobór pytań, powrót błędu po 3–6 pytaniach, boss, runda DO POPRAWY, XP i combo.
 - `app/src/game/grading.ts` — ocena odpowiedzi (poprawna / PRAWIE / błąd).

@@ -16,11 +16,6 @@ if (!jsFile || !cssFile) throw new Error('Brak dist/assets — najpierw npm run 
 const js = readFileSync(join(assets, jsFile), 'utf8').split('</script').join('<\\/script')
 const css = readFileSync(join(assets, cssFile), 'utf8')
 
-const FONTS =
-  '<link rel="preconnect" href="https://fonts.googleapis.com" />\n' +
-  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n' +
-  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Rubik:wght@400;600;700;800&display=swap" />'
-
 const full = `<!doctype html>
 <html lang="pl">
 <head>
@@ -28,7 +23,6 @@ const full = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
 <meta name="theme-color" content="#0d1846" />
 <title>Spanish Verb Rush</title>
-${FONTS}
 <style>${css}</style>
 </head>
 <body>

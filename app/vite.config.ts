@@ -6,6 +6,10 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  // wszystko (też czcionki) inline — gra jako jeden plik HTML, działa bez dodatkowych zapytań
+  build: {
+    assetsInlineLimit: 10_000_000,
+  },
   test: {
     environment: 'node',
   },

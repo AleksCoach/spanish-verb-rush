@@ -1,0 +1,36 @@
+{
+  "es": [
+    {
+      "id": "mGlMpcOq63YZLdidTVyo",
+      "name": "Dino - Persuasive, Energetic and Bright",
+      "description": "A young, energetic and convincing voice that transmits enthusiasm and confidence, perfect for capturing attention and promoting any product with impact."
+    },
+    {
+      "id": "D7dkYvH17OKLgp4SLulf",
+      "name": "Martin Osborne - Polished and Energetic",
+      "description": "Middle aged Spanish-Castillian male voice. Voice works well for TV Ads & commercials."
+    },
+    {
+      "id": "NhUo7cJi70nyU8yfCimA",
+      "name": "Theo - Friendly, Upbeat and Persuasive",
+      "description": "Spanish male upbeat, confident and friendly voice for Social Media videos, Explainer videos, Internet Spots, Radio and TV advertisements."
+    }
+  ],
+  "pl": [
+    {
+      "id": "H0Es1EyjnIrTdY0BEF0V",
+      "name": "Maciek",
+      "description": "Youthful voice, perfect for ads. Energetic. Short sentences. Teens & social media style.\r\nPolish, Poland, Poles, Slavic, Eastern Europe."
+    },
+    {
+      "id": "04BD7Fenyf9Ysq983wrd",
+      "name": "Oscar - Energetic & Direct",
+      "description": "A clear, natural voice for short-form spoken content and advertisements. Optimized for social media clips, reels, shorts, and paid formats.\nStrong pacing, direct delivery, and concise messaging that sounds authentic, not overproduced."
+    },
+    {
+      "id": "RHB1OklmK66FVkCBVHhP",
+      "name": "Krzysztof - Dynamic and Vivid",
+      "description": "Energetic and expressive Polish voice with friendly tone and professional clarity. Great for commercials, podcasts, and YouTube content."
+    }
+  ]
+}

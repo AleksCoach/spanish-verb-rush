@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { sheetFor } from '../data/cheatsheets'
 import { EXAM_IRREGULAR, EXAM_LEVEL, LEVELS, isUnlocked, nextLevelToPlay } from '../data/levels'
 import { PERSONS, REFLEXIVE_VERBS, VERBS, VERB_BY_INF, ruleForm } from '../data/verbs'
 import { advance, examPlan, makeQuestion, newRound, schoolGrade, submit, summarize } from './engine'
@@ -234,6 +235,18 @@ describe('silnik rundy', () => {
     const wrong = submit(s, level, stats, 'zzz', rng)
     expect(wrong.state.combo).toBe(0)
     expect(wrong.state.bestCombo).toBe(5)
+  })
+})
+
+describe('ściągi', () => {
+  it('każdy poziom ma ściągę z regułą i tekstem do czytania PL/ES', () => {
+    for (const level of LEVELS) {
+      const sheet = sheetFor(level)
+      expect(sheet.title.length, level.key).toBeGreaterThan(0)
+      expect(sheet.rule.length, level.key).toBeGreaterThan(0)
+      expect(sheet.speech.length, level.key).toBeGreaterThan(0)
+      if (level.bossVerb) expect(sheet.formsOf).toBe(level.bossVerb)
+    }
   })
 })
 

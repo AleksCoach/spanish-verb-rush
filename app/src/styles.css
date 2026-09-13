@@ -1566,6 +1566,188 @@ kbd {
   color: var(--ok);
 }
 
+/* ---------- ściąga przed poziomem ---------- */
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 22px 22px;
+  text-align: left;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tag-sheet {
+  background: var(--cobalt);
+  color: var(--glaze);
+}
+
+.sheet-voice {
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--cobalt-ink);
+  color: var(--glaze);
+  font: 700 15px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.sheet-voice:focus-visible {
+  outline: 3px solid var(--saffron);
+  outline-offset: 2px;
+}
+
+.sheet-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(30px, 9vw, 44px);
+  line-height: 1.05;
+  color: var(--cobalt-ink);
+  text-wrap: balance;
+}
+
+.sheet-rule {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--cobalt-ink);
+}
+
+.sheet-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheet-example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.sheet-inf {
+  min-width: 96px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--cobalt-ink);
+}
+
+.sheet-person {
+  font-size: 15px;
+  color: var(--plaque-muted);
+}
+
+.sheet .decomp {
+  margin-top: 0;
+  font-size: 19px;
+}
+
+.sheet-table-wrap {
+  overflow-x: auto;
+}
+
+.sheet-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-table th,
+.sheet-table td {
+  padding: 7px 8px;
+  text-align: center;
+  border-bottom: 1px dashed #c3cdee;
+}
+
+.sheet-table thead th {
+  border-bottom: 0;
+  color: #ffffff;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.sheet-table thead th:first-child {
+  background: transparent;
+}
+
+.th-ar {
+  background: var(--ar);
+  border-radius: 8px 8px 0 0;
+}
+
+.th-er {
+  background: var(--er);
+  border-radius: 8px 8px 0 0;
+}
+
+.th-ir {
+  background: var(--ir);
+  border-radius: 8px 8px 0 0;
+}
+
+.sheet-table tbody th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--plaque-muted);
+}
+
+.sheet-table td {
+  font-weight: 800;
+  color: var(--cobalt-ink);
+}
+
+.sheet-table tr.is-hl th,
+.sheet-table tr.is-hl td {
+  background: #fff1c7;
+}
+
+.sheet .pronoun {
+  background: #e7ecfa;
+}
+
+.sheet .pronoun-person {
+  color: var(--plaque-muted);
+}
+
+.sheet .pronoun b {
+  color: #0f766e;
+}
+
+.sheet .forms {
+  max-width: none;
+}
+
+.sheet-fix {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet-fix s {
+  color: var(--bad-ink);
+  text-decoration-thickness: 2px;
+}
+
+.sheet-fix b {
+  color: var(--ok-ink);
+}
+
+.sheet-tip {
+  margin: 0;
+  font-size: 15px;
+  color: var(--plaque-muted);
+}
+
 /* ---------- zwrotne i egzamin ---------- */
 
 .chip-se {

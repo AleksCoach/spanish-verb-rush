@@ -1,4 +1,5 @@
-import type { ItemStat, SaveData } from './types'
+import { V1_LEVEL_KEYS } from '../data/levels'
+import type { ItemStat, LevelBest, SaveData } from './types'
 
 // Profile graczy i ich postęp trzymamy w localStorage przeglądarki (per urządzenie).
 const PROFILES_KEY = 'svr.profiles.v1'
@@ -32,7 +33,39 @@ function write(key: string, value: unknown): void {
 }
 
 export function emptySave(): SaveData {
-  return { version: 1, xp: 0, unlocked: 1, bestCombo: 0, levels: {}, stats: {}, sound: true }
+  return { version: 2, xp: 0, bestCombo: 0, levels: {}, stats: {}, sound: true, exams: [], activity: {} }
+}
+
+type SaveV1 = {
+  version: 1
+  xp?: number
+  bestCombo?: number
+  levels?: Record<string, LevelBest>
+  stats?: Record<string, ItemStat>
+  sound?: boolean
+}
+
+/** v1 trzymał wyniki pod numerami leveli — przepisujemy na stałe klucze (nowa kolejność leveli). */
+export function migrateSave(raw: unknown): SaveData {
+  const data = raw as Partial<SaveData> | SaveV1 | null
+  if (!data || typeof data !== 'object') return emptySave()
+  if (data.version === 2) return { ...emptySave(), ...data }
+  if (data.version === 1) {
+    const levels: Record<string, LevelBest> = {}
+    for (const [id, best] of Object.entries(data.levels ?? {})) {
+      const key = V1_LEVEL_KEYS[Number(id) - 1]
+      if (key && key !== 'boss-rush') levels[key] = best
+    }
+    return {
+      ...emptySave(),
+      xp: data.xp ?? 0,
+      bestCombo: data.bestCombo ?? 0,
+      stats: data.stats ?? {},
+      sound: data.sound ?? true,
+      levels,
+    }
+  }
+  return emptySave()
 }
 
 export function loadProfiles(): Profile[] {
@@ -84,9 +117,7 @@ export function setActiveProfile(id: string | null): void {
 }
 
 export function loadSave(profileId: string): SaveData {
-  const data = read<Partial<SaveData> | null>(saveKey(profileId), null)
-  if (!data || data.version !== 1) return emptySave()
-  return { ...emptySave(), ...data }
+  return migrateSave(read<unknown>(saveKey(profileId), null))
 }
 
 export function writeSave(profileId: string, data: SaveData): void {

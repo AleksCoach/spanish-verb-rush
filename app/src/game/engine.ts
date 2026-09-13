@@ -1,4 +1,4 @@
-import { GROUP_LABEL, PERSONS, PERSON_LABEL, VERB_BY_INF } from '../data/verbs'
+import { GROUP_LABEL, PERSONS, PERSON_LABEL, PERSON_SHORT, VERB_BY_INF } from '../data/verbs'
 import { grade } from './grading'
 import { emptyStat, itemKey } from './storage'
 import type { AnswerRecord, Grade, Group, ItemStat, LevelDef, Person, Question } from './types'
@@ -14,6 +14,8 @@ export type RoundState = {
   history: AnswerRecord[]
   /** błędne pytania czekające na powrót w rundzie głównej */
   retries: { key: string; due: number; kind: Question['kind'] }[]
+  /** egzamin: z góry ułożony, zbalansowany zestaw pytań */
+  examQueue: { key: string; kind: Question['kind'] }[]
   /** klucze z błędem w tej rundzie (kolejność pierwszego błędu) */
   failed: string[]
   recoveryQueue: string[]
@@ -111,8 +113,10 @@ export function makeQuestion(
 ): Question {
   const v = VERB_BY_INF[verb]
   const answer = v.forms[person]
-  const q: Question = { n, kind, verb, person, answer, retry, phase }
-  if (kind === 'fix') {
+  // bez dopełnień (np. llamarse) nie da się zbudować zdania → zwykłe pytanie
+  const safeKind = kind === 'fix' && v.complements.length === 0 ? 'conjugate' : kind
+  const q: Question = { n, kind: safeKind, verb, person, answer, retry, phase }
+  if (safeKind === 'fix') {
     const options = CONFUSIONS[person].filter((p) => v.forms[p] !== answer)
     const wrongPerson = pick(rng, options.length ? options : PERSONS.filter((p) => v.forms[p] !== answer))
     const subject = pick(rng, SUBJECTS[person])
@@ -139,6 +143,7 @@ export function newRound(level: LevelDef, stats: Record<string, ItemStat>, rng: 
     mainAnswered: 0,
     history: [],
     retries: [],
+    examQueue: level.kind === 'exam' ? examPlan(level, rng) : [],
     failed: [],
     recoveryQueue: [],
     recoveryTotal: 0,
@@ -192,6 +197,16 @@ export function advance(prev: RoundState, level: LevelDef, stats: Record<string,
 
   if (s.phase === 'done') return s
 
+  // egzamin: kolejne pytanie z ułożonego zestawu, bez powtórek w trakcie
+  if (level.kind === 'exam') {
+    const [next, ...rest] = s.examQueue
+    s.examQueue = rest
+    const { verb, person } = splitKey(next.key)
+    s.current = makeQuestion(rng, s.counter, verb, person, next.kind, false, 'main')
+    s.counter += 1
+    return s
+  }
+
   // runda główna: najpierw zaległe powtórki błędów
   const dueIdx = s.retries.findIndex((r) => r.due <= s.mainAnswered)
   if (dueIdx >= 0) {
@@ -213,6 +228,42 @@ export function advance(prev: RoundState, level: LevelDef, stats: Record<string,
   s.current = makeQuestion(rng, s.counter, verb, person, kind, Boolean(pending), 'main')
   s.counter += 1
   return s
+}
+
+/** Egzamin: 6 regularnych (po 2 z -AR/-ER/-IR), 4 zwrotne, każdy nieregularny min. 1×, reszta losowo; osoby rozłożone równo. */
+export function examPlan(level: LevelDef, rng: Rng): { key: string; kind: Question['kind'] }[] {
+  const verbs = level.verbs.map((inf) => VERB_BY_INF[inf])
+  const regular = verbs.filter((v) => v.type === 'regular' && !v.reflexive)
+  const reflexive = verbs.filter((v) => v.type === 'regular' && v.reflexive)
+  const irregular = shuffle(rng, verbs.filter((v) => v.type === 'irregular')).map((v) => v.infinitive)
+  const picks: string[] = []
+  for (const g of ['ar', 'er', 'ir'] as Group[]) {
+    picks.push(...shuffle(rng, regular.filter((v) => v.group === g)).slice(0, 2).map((v) => v.infinitive))
+  }
+  picks.push(...shuffle(rng, reflexive).slice(0, 4).map((v) => v.infinitive))
+  picks.push(...irregular)
+  picks.push(...shuffle(rng, irregular).slice(0, Math.max(0, level.length - picks.length)))
+
+  let bag: Person[] = []
+  const used = new Set<string>()
+  const keys = picks.slice(0, level.length).map((verb) => {
+    for (let tries = 0; tries < 12; tries++) {
+      if (!bag.length) bag = shuffle(rng, PERSONS)
+      const key = itemKey(verb, bag.shift()!)
+      if (!used.has(key)) {
+        used.add(key)
+        return key
+      }
+    }
+    const key = itemKey(verb, PERSONS.find((p) => !used.has(itemKey(verb, p)))!)
+    used.add(key)
+    return key
+  })
+
+  const order = shuffle(rng, keys)
+  const fixable = order.map((k, i) => ({ k, i })).filter(({ k }) => VERB_BY_INF[splitKey(k).verb].complements.length > 0)
+  const fixIdx = new Set(shuffle(rng, fixable).slice(0, Math.round(order.length * level.fixRatio)).map(({ i }) => i))
+  return order.map((key, i) => ({ key, kind: fixIdx.has(i) ? 'fix' : 'conjugate' }))
 }
 
 function pickFresh(s: RoundState, level: LevelDef, stats: Record<string, ItemStat>, rng: Rng): string {
@@ -266,8 +317,8 @@ function finish(s: RoundState): void {
   s.phase = 'done'
   s.current = null
   const mainWrong = s.history.some((h) => h.q.phase === 'main' && h.grade === 'wrong')
-  if (!mainWrong && s.history.length > 0 && !s.bonuses.some((b) => b.label === 'PERFECT ROUND')) {
-    s.bonuses = [...s.bonuses, { label: 'PERFECT ROUND', xp: XP.perfect }]
+  if (!mainWrong && s.history.length > 0 && !s.bonuses.some((b) => b.label === 'BEZ BŁĘDU')) {
+    s.bonuses = [...s.bonuses, { label: 'BEZ BŁĘDU', xp: XP.perfect }]
     s.xp += XP.perfect
   }
 }
@@ -294,9 +345,11 @@ export function submit(
     fixedError = hadError
     xp = hadError ? XP.fixedError : XP.correct
     s.combo += 1
-    if ([2, 3, 5, 10].includes(s.combo) || (s.combo > 10 && s.combo % 5 === 0)) comboMilestone = s.combo
-    if (s.combo === 10) xp += XP.combo10
-    else if (s.combo % 5 === 0) xp += XP.combo5
+    if (level.kind !== 'exam') {
+      if ([2, 3, 5, 10].includes(s.combo) || (s.combo > 10 && s.combo % 5 === 0)) comboMilestone = s.combo
+      if (s.combo === 10) xp += XP.combo10
+      else if (s.combo % 5 === 0) xp += XP.combo5
+    }
   } else if (g === 'almost') {
     xp = XP.almost
   } else {
@@ -326,15 +379,17 @@ export function submit(
     s.mainAnswered += 1
     if (g === 'wrong') {
       if (!hadError) s.failed = [...s.failed, key]
-      const gap = level.kind === 'boss' ? randInt(rng, 2, 3) : randInt(rng, 3, 6)
-      s.retries = [...s.retries.filter((r) => r.key !== key), { key, due: s.mainAnswered + gap, kind: q.kind }]
+      if (level.kind !== 'exam') {
+        const gap = level.kind === 'boss' ? randInt(rng, 2, 3) : randInt(rng, 3, 6)
+        s.retries = [...s.retries.filter((r) => r.key !== key), { key, due: s.mainAnswered + gap, kind: q.kind }]
+      }
     } else if (level.kind === 'boss') {
       bossHit = true
       s.bossHp = Math.max(0, s.bossHp - 1)
       s.bossHits = { ...s.bossHits, [q.person]: (s.bossHits[q.person] ?? 0) + 1 }
       if (s.bossHp === 0) {
         bossDefeated = true
-        s.bonuses = [...s.bonuses, { label: 'BOSS DEFEATED', xp: XP.boss }]
+        s.bonuses = [...s.bonuses, { label: 'JEFE POKONANY', xp: XP.boss }]
         s.xp += XP.boss
       }
     }
@@ -350,6 +405,8 @@ export type Summary = {
   ok: number
   total: number
   accuracy: number
+  /** wynik punktowy: PRAWIE = pół punktu (egzamin); w levelach = accuracy */
+  score: number
   stars: number
   passed: boolean
   bestCombo: number
@@ -358,20 +415,52 @@ export type Summary = {
   recovered: number
   mastered: string[]
   toReview: { label: string; form: string }[]
+  exam?: {
+    grade: { value: number; label: string }
+    breakdown: { label: string; points: number; total: number }[]
+    errors: { prompt: string; input: string; answer: string; grade: Grade }[]
+  }
+}
+
+/** Ocena orientacyjna wg typowej szkolnej skali procentowej. */
+export function schoolGrade(score: number): { value: number; label: string } {
+  if (score >= 0.96) return { value: 6, label: 'celujący' }
+  if (score >= 0.86) return { value: 5, label: 'bardzo dobry' }
+  if (score >= 0.71) return { value: 4, label: 'dobry' }
+  if (score >= 0.51) return { value: 3, label: 'dostateczny' }
+  if (score >= 0.31) return { value: 2, label: 'dopuszczający' }
+  return { value: 1, label: 'niedostateczny' }
+}
+
+function kindLabel(verb: string): string {
+  const v = VERB_BY_INF[verb]
+  if (v.type === 'irregular') return verb.toUpperCase()
+  return v.reflexive ? 'ZWROTNE' : GROUP_LABEL[v.group]
 }
 
 function categoryLabel(verb: string, person: Person): string {
-  const v = VERB_BY_INF[verb]
-  if (v.type === 'irregular') return `${verb.toUpperCase()} / ${PERSON_LABEL[person]}`
-  return `${GROUP_LABEL[v.group]} / ${PERSON_LABEL[person]}`
+  return `${kindLabel(verb)} / ${PERSON_LABEL[person]}`
 }
+
+function examCategory(verb: string): string {
+  const v = VERB_BY_INF[verb]
+  if (v.type === 'irregular') return verb
+  return v.reflexive ? 'zwrotne (-se)' : 'regularne (-ar/-er/-ir)'
+}
+
+const points = (h: AnswerRecord) => (h.grade === 'correct' ? 1 : h.grade === 'almost' ? 0.5 : 0)
 
 export function summarize(s: RoundState, level: LevelDef): Summary {
   const main = s.history.filter((h) => h.q.phase === 'main')
   const ok = main.filter((h) => h.grade !== 'wrong').length
   const total = main.length
   const accuracy = total ? ok / total : 0
-  let stars = accuracy >= 1 ? 3 : accuracy >= 0.85 ? 2 : accuracy >= 0.7 ? 1 : 0
+  const isExam = level.kind === 'exam'
+  const score = isExam ? (total ? main.reduce((a, h) => a + points(h), 0) / total : 0) : accuracy
+
+  let stars: number
+  if (isExam) stars = score >= 0.95 ? 3 : score >= 0.85 ? 2 : score >= 0.7 ? 1 : 0
+  else stars = accuracy >= 1 ? 3 : accuracy >= 0.85 ? 2 : accuracy >= 0.7 ? 1 : 0
   if (level.kind === 'boss') stars = Math.max(1, stars)
 
   const cat = new Map<string, { ok: number; wrong: number }>()
@@ -390,15 +479,42 @@ export function summarize(s: RoundState, level: LevelDef): Summary {
   const toReview = s.failed.map((k) => {
     const { verb, person } = splitKey(k)
     const v = VERB_BY_INF[verb]
-    const label =
-      v.type === 'irregular' ? `${verb.toUpperCase()} / ${PERSON_LABEL[person]}` : `${GROUP_LABEL[v.group]} / ${PERSON_LABEL[person]} (${verb})`
+    const label = v.type === 'irregular' ? categoryLabel(verb, person) : `${categoryLabel(verb, person)} (${verb})`
     return { label, form: v.forms[person] }
   })
+
+  let exam: Summary['exam']
+  if (isExam) {
+    const groups = new Map<string, { points: number; total: number }>()
+    for (const h of main) {
+      const label = examCategory(h.q.verb)
+      const g = groups.get(label) ?? { points: 0, total: 0 }
+      g.points += points(h)
+      g.total += 1
+      groups.set(label, g)
+    }
+    const order = (label: string) => (label.startsWith('regularne') ? 0 : label.startsWith('zwrotne') ? 1 : 2)
+    exam = {
+      grade: schoolGrade(score),
+      breakdown: [...groups.entries()]
+        .sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
+        .map(([label, g]) => ({ label, ...g })),
+      errors: main
+        .filter((h) => h.grade !== 'correct')
+        .map((h) => ({
+          prompt: h.q.kind === 'fix' ? (h.q.wrongSentence ?? '') : `${h.q.verb.toUpperCase()} · ${PERSON_SHORT[h.q.person]}`,
+          input: h.input,
+          answer: h.q.answer,
+          grade: h.grade,
+        })),
+    }
+  }
 
   return {
     ok,
     total,
     accuracy,
+    score,
     stars,
     passed: stars >= 1,
     bestCombo: s.bestCombo,
@@ -407,5 +523,6 @@ export function summarize(s: RoundState, level: LevelDef): Summary {
     recovered: s.recoveryTotal,
     mastered,
     toReview,
+    exam,
   }
 }

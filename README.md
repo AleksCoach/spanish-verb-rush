@@ -1,6 +1,6 @@
-# Spanish Verb Rush
+# ¡A conjugar!
 
-Gra webowa do nauki odmiany hiszpańskich czasowników w **Presente de indicativo**: krótkie rundy, natychmiastowy feedback, combo, bossowie-czasowniki nieregularne i powtarzanie błędów aż do skutku.
+Gra webowa do nauki odmiany hiszpańskich czasowników w **Presente de indicativo**: krótkie rundy, natychmiastowa informacja zwrotna, serie, „jefes” (czasowniki nieregularne), czasowniki zwrotne, egzamin próbny i powtarzanie błędów aż do skutku.
 
 **Graj:** https://alekscoach.github.io/spanish-verb-rush/
 
@@ -11,25 +11,25 @@ Gra webowa do nauki odmiany hiszpańskich czasowników w **Presente de indicativ
 3. Błąd nie kończy gry. Gra pokazuje poprawną formę i rozkład (`habl + o`), a pytanie wraca po kilku następnych. Na końcu każdej rundy jest etap **DO POPRAWY**.
 4. Akcenty: przyciski `á é í ó ú` albo skrót `a` + `'` → `á`. Brak akcentu to **PRAWIE**, nie błąd.
 
-## Levele
+## Poziomy
 
-| # | Level | Co ćwiczy |
-|---|-------|-----------|
+| # | Poziom | Co ćwiczy |
+|---|--------|-----------|
 | 1 | YO | tylko `yo`, czasowniki -AR / -ER / -IR z podpowiedzią grupy |
 | 2 | TÚ | `yo` + `tú` |
-| 3 | MIX | `yo` · `tú` · `él/ella` |
-| 4 | FULL TEAM | wszystkie 6 osób |
-| 5 | MIXED VERBS | bez podpowiedzi grup + tryb **NAPRAW BŁĄD** („Yo hablas español.” → `hablo`) |
-| 6–9 | BOSS | tener · ser · estar · ir (boss ma 10 HP) |
-| 10 | BOSS RUSH | powtórka tener/ser/estar/ir + regularne |
-| 11–15 | BOSS | hacer · querer · poder · jugar · venir |
-| 16 | WIELKI MIX | wszystko naraz |
+| 3 | YO · TÚ · ÉL | `yo` · `tú` · `él/ella` |
+| 4 | WSZYSCY | wszystkie 6 osób |
+| 5 | MIESZANKA | bez podpowiedzi grup + tryb **NAPRAW BŁĄD** („Yo hablas español.” → `hablo`) |
+| 6 | ZWROTNE -SE | zaimek + forma: `me levanto`, `os quedáis` |
+| 7–13 | JEFE | tener · ser · estar · ir · ver · jugar · acostarse (10 żyć) |
+| 14 | EGZAMIN | egzamin próbny „Kompetencja 1”: 20 pytań z całego zakresu, wynik w %, ocena orientacyjna, poprawa błędów |
+| 15–19 | dodatkowe | hacer · querer · poder · venir · WIELKA MIESZANKA (poza zakresem egzaminu) |
 
-Następny level odblokowuje się po zdobyciu 70% poprawnych odpowiedzi. Bossa zawsze da się pokonać.
+Egzamin jest dostępny zawsze. Następny poziom odblokowuje się po 70% poprawnych odpowiedzi, a jefe da się zawsze pokonać.
 
 ## Zapis postępu
 
-Profile i postęp są zapisane w `localStorage` przeglądarki, na tym urządzeniu, na którym się gra. Nie ma backendu ani kont w chmurze. PIN tylko chroni przed przypadkowym graniem na cudzym profilu, nie jest zabezpieczeniem danych.
+Profile, postęp i dzienna aktywność (czas aktywny liczony do 5 s bez ruchu, liczba przykładów, poprawność) są zapisane w `localStorage` przeglądarki, na tym urządzeniu, na którym się gra. Nie ma jeszcze backendu ani panelu rodzica (etap 2). PIN tylko chroni przed przypadkowym graniem na cudzym profilu, nie jest zabezpieczeniem danych.
 
 ## Dla dewelopera
 

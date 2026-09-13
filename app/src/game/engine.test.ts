@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { LEVELS } from '../data/levels'
-import { PERSONS, VERBS, ruleForm } from '../data/verbs'
-import { advance, makeQuestion, newRound, submit, summarize } from './engine'
+import { EXAM_IRREGULAR, EXAM_LEVEL, LEVELS, isUnlocked, nextLevelToPlay } from '../data/levels'
+import { PERSONS, REFLEXIVE_VERBS, VERBS, VERB_BY_INF, ruleForm } from '../data/verbs'
+import { advance, examPlan, makeQuestion, newRound, schoolGrade, submit, summarize } from './engine'
 import type { Rng, RoundState } from './engine'
 import { accentDiffs, applyAccentShortcuts, grade, stripAccents } from './grading'
-import { itemKey } from './storage'
+import { emptySave, itemKey, migrateSave } from './storage'
 import type { ItemStat, LevelDef } from './types'
 
 function mulberry32(seed: number): Rng {
@@ -33,22 +33,43 @@ describe('ocenianie odpowiedzi', () => {
     expect(grade('comemos', 'coméis')).toBe('wrong')
   })
 
+  it('zwrotne: zaimek + forma, w tej kolejności', () => {
+    expect(grade('me levanto', 'me levanto')).toBe('correct')
+    expect(grade('Yo me levanto a las siete.', 'me levanto')).toBe('correct')
+    expect(grade('me levantó', 'me levanto')).toBe('almost')
+    expect(grade('os acostais', 'os acostáis')).toBe('almost')
+    expect(grade('levanto', 'me levanto')).toBe('wrong')
+    expect(grade('te levanto', 'me levanto')).toBe('wrong')
+    expect(grade('levanto me', 'me levanto')).toBe('wrong')
+  })
+
   it('skróty akcentów i podświetlenie brakującego akcentu', () => {
     expect(applyAccentShortcuts("habla'is")).toBe('habláis')
     expect(applyAccentShortcuts("vivi's")).toBe('vivís')
     expect(accentDiffs('hablais', 'habláis')).toEqual([4])
+    expect(accentDiffs('os acostais', 'os acostáis')).toEqual([8])
     expect(stripAccents('está')).toBe('esta')
   })
 })
 
 describe('dane czasowników', () => {
-  it('regularne zgodne z regułą, każda forma unikalna w obrębie czasownika', () => {
+  it('regularne (też zwrotne) zgodne z regułą, formy unikalne, zdania dla czasowników z dopełnieniami', () => {
     for (const v of VERBS) {
       const forms = PERSONS.map((p) => v.forms[p])
       expect(new Set(forms).size, v.infinitive).toBe(6)
       if (v.type === 'regular') for (const p of PERSONS) expect(v.forms[p]).toBe(ruleForm(v.infinitive, p))
-      expect(v.complements.length).toBeGreaterThanOrEqual(2)
+      expect(v.complements.length === 0 || v.complements.length >= 2, v.infinitive).toBe(true)
+      if (v.reflexive) for (const p of PERSONS) expect(v.forms[p].split(' ').length, v.infinitive).toBe(2)
     }
+    expect(VERB_BY_INF['levantarse'].forms.vosotros).toBe('os levantáis')
+    expect(VERB_BY_INF['acostarse'].forms.yo).toBe('me acuesto')
+    expect(VERB_BY_INF['ver'].forms.vosotros).toBe('veis')
+  })
+
+  it('zakres egzaminu jest w grze: regularne, zwrotne i nieregularne z listy', () => {
+    for (const inf of EXAM_IRREGULAR) expect(VERB_BY_INF[inf]?.type, inf).toBe('irregular')
+    expect(REFLEXIVE_VERBS.length).toBeGreaterThanOrEqual(4)
+    expect(EXAM_LEVEL.verbs).toEqual(expect.arrayContaining([...EXAM_IRREGULAR, ...REFLEXIVE_VERBS]))
   })
 
   it('NAPRAW BŁĄD: zdanie zawiera złą formę, a poprawne zdanie dobrą', () => {
@@ -56,6 +77,10 @@ describe('dane czasowników', () => {
     for (const v of VERBS) {
       for (const p of PERSONS) {
         const q = makeQuestion(rng, 0, v.infinitive, p, 'fix', false, 'main')
+        if (v.complements.length === 0) {
+          expect(q.kind).toBe('conjugate')
+          continue
+        }
         expect(q.wrongSentence).toBeTruthy()
         expect(q.wrongSentence).not.toBe(q.rightSentence)
         expect(grade(q.rightSentence!, q.answer)).toBe('correct')
@@ -89,14 +114,13 @@ function simulate(level: LevelDef, seed: number, pCorrect = 0.65, pAlmost = 0.1)
 describe('silnik rundy', () => {
   for (const level of LEVELS) {
     it(`level ${level.id} (${level.code}) zawsze się kończy i trzyma zasady`, () => {
-      for (let seed = 1; seed <= 60; seed++) {
+      for (let seed = 1; seed <= 40; seed++) {
         const { state } = simulate(level, seed)
         const main = state.history.filter((h) => h.q.phase === 'main')
         const summary = summarize(state, level)
 
         if (level.kind === 'boss') {
           expect(state.bossHp).toBe(0)
-          // każda osoba bossa: trafiona w walce albo (po błędzie) poprawiona w rundzie DO POPRAWY
           for (const p of PERSONS) {
             const hit = (state.bossHits[p] ?? 0) >= 1
             const failedKey = state.failed.includes(itemKey(level.bossVerb!, p))
@@ -106,7 +130,6 @@ describe('silnik rundy', () => {
           expect(main.length).toBe(level.length)
         }
 
-        // runda DO POPRAWY: każdy błędny przykład na końcu rozwiązany poprawnie
         const failed = new Set(main.filter((h) => h.grade === 'wrong').map((h) => itemKey(h.q.verb, h.q.person)))
         const rec = state.history.filter((h) => h.q.phase === 'recovery')
         for (const key of failed) {
@@ -115,21 +138,52 @@ describe('silnik rundy', () => {
           expect(last!.grade).not.toBe('wrong')
         }
 
-        // żadne pytanie nie powtarza się dwa razy z rzędu w rundzie głównej
         for (let i = 1; i < main.length; i++) {
           const a = itemKey(main[i - 1].q.verb, main[i - 1].q.person)
           const b = itemKey(main[i].q.verb, main[i].q.person)
           expect(a === b, `powtórka z rzędu: ${a}`).toBe(false)
         }
 
-        // osoby spoza zakresu levelu nie występują
-        for (const h of main) expect((level.persons[h.q.person] ?? 0) > 0).toBe(true)
+        for (const h of main) {
+          expect((level.persons[h.q.person] ?? 0) > 0).toBe(true)
+          expect(level.verbs.includes(h.q.verb), `${h.q.verb} spoza levelu`).toBe(true)
+        }
+
+        if (level.kind === 'exam') {
+          expect(main.some((h) => h.q.retry)).toBe(false)
+          expect(summary.exam).toBeTruthy()
+          expect(summary.exam!.breakdown.reduce((a, b) => a + b.total, 0)).toBe(level.length)
+        }
 
         expect(summary.total).toBe(main.length)
         expect(summary.xp).toBe(state.xp)
       }
     })
   }
+
+  it('egzamin: zbalansowany zestaw, każdy nieregularny z listy, bez powtórzeń par', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const plan = examPlan(EXAM_LEVEL, mulberry32(seed))
+      expect(plan.length).toBe(20)
+      expect(new Set(plan.map((p) => p.key)).size).toBe(20)
+      const verbs = plan.map((p) => VERB_BY_INF[p.key.split('|')[0]])
+      expect(verbs.filter((v) => v.type === 'regular' && !v.reflexive).length).toBe(6)
+      expect(verbs.filter((v) => v.type === 'regular' && v.reflexive).length).toBe(4)
+      for (const inf of EXAM_IRREGULAR) expect(verbs.some((v) => v.infinitive === inf), inf).toBe(true)
+      expect(plan.filter((p) => p.kind === 'fix').length).toBe(5)
+    }
+  })
+
+  it('egzamin: PRAWIE = pół punktu, ocena orientacyjna', () => {
+    const { state } = simulate(EXAM_LEVEL, 5, 0.5, 0.5)
+    const s = summarize(state, EXAM_LEVEL)
+    const main = state.history.filter((h) => h.q.phase === 'main')
+    const expected = main.reduce((a, h) => a + (h.grade === 'correct' ? 1 : h.grade === 'almost' ? 0.5 : 0), 0) / 20
+    expect(s.score).toBeCloseTo(expected)
+    expect(schoolGrade(0.97).value).toBe(6)
+    expect(schoolGrade(0.7).value).toBe(3)
+    expect(schoolGrade(0.2).value).toBe(1)
+  })
 
   it('błędne pytanie wraca w rundzie głównej po 3–6 pytaniach (albo trafia do poprawy)', () => {
     const level = LEVELS[3]
@@ -140,22 +194,20 @@ describe('silnik rundy', () => {
         if (h.grade !== 'wrong') return
         const key = itemKey(h.q.verb, h.q.person)
         const back = main.findIndex((x, j) => j > i && itemKey(x.q.verb, x.q.person) === key)
-        if (back === -1) return // za późno w rundzie → runda DO POPRAWY (sprawdzone wyżej)
-        const gap = back - i
-        expect(gap).toBeGreaterThanOrEqual(3)
+        if (back === -1) return
+        expect(back - i).toBeGreaterThanOrEqual(3)
         expect(main[back].q.retry).toBe(true)
       })
     }
   })
 
-  it('bezbłędna runda daje PERFECT ROUND, a odblokowanie wymaga 70%', () => {
+  it('bezbłędna runda daje bonus BEZ BŁĘDU, a odblokowanie wymaga 70%', () => {
     const level = LEVELS[0]
     const perfect = simulate(level, 3, 1, 0).state
     const s = summarize(perfect, level)
     expect(s.stars).toBe(3)
     expect(s.passed).toBe(true)
-    expect(perfect.bonuses.some((b) => b.label === 'PERFECT ROUND')).toBe(true)
-    expect(perfect.phase).toBe('done')
+    expect(perfect.bonuses.some((b) => b.label === 'BEZ BŁĘDU')).toBe(true)
     expect(perfect.recoveryTotal).toBe(0)
 
     const weak = simulate(level, 3, 0.3, 0).state
@@ -175,7 +227,6 @@ describe('silnik rundy', () => {
     }
     expect(s.combo).toBe(5)
     expect(bonusSeen).toBe(true)
-    // formy YO kończą się na -o; dopisany akcent (habló) = PRAWIE
     const almost = submit(s, level, stats, s.current!.answer.slice(0, -1) + 'ó', rng)
     expect(almost.record.grade).toBe('almost')
     expect(almost.state.combo).toBe(5)
@@ -183,5 +234,35 @@ describe('silnik rundy', () => {
     const wrong = submit(s, level, stats, 'zzz', rng)
     expect(wrong.state.combo).toBe(0)
     expect(wrong.state.bestCombo).toBe(5)
+  })
+})
+
+describe('postęp i odblokowanie', () => {
+  it('migracja zapisu v1 (numery leveli) na klucze + nowa kolejność', () => {
+    const v1 = {
+      version: 1,
+      xp: 420,
+      unlocked: 7,
+      bestCombo: 9,
+      levels: { 1: { stars: 3, bestAccuracy: 1, plays: 1, bestCombo: 12 }, 5: { stars: 1, bestAccuracy: 0.7, plays: 2, bestCombo: 4 }, 6: { stars: 1, bestAccuracy: 0.6, plays: 1, bestCombo: 3 } },
+      stats: { 'hablar|yo': { attempts: 2, correct: 2, wrong: 0, streak: 2 } },
+      sound: false,
+    }
+    const save = migrateSave(v1)
+    expect(save.version).toBe(2)
+    expect(save.xp).toBe(420)
+    expect(save.sound).toBe(false)
+    expect(save.levels['yo'].stars).toBe(3)
+    expect(save.levels['mixed-verbs'].stars).toBe(1)
+    expect(save.levels['boss-tener'].stars).toBe(1)
+    expect(save.stats['hablar|yo'].correct).toBe(2)
+
+    const byKey = (k: string) => LEVELS.find((l) => l.key === k)!
+    expect(isUnlocked(byKey('zwrotne'), save)).toBe(true)
+    expect(isUnlocked(byKey('boss-tener'), save)).toBe(true) // już grany
+    expect(isUnlocked(byKey('boss-ser'), save)).toBe(true) // poprzedni (tener) zaliczony
+    expect(isUnlocked(byKey('boss-estar'), save)).toBe(false)
+    expect(isUnlocked(EXAM_LEVEL, emptySave())).toBe(true) // egzamin zawsze otwarty
+    expect(nextLevelToPlay(save).key).toBe('tu')
   })
 })

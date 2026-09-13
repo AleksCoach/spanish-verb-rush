@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { PERSONS, PERSON_LABEL, PERSON_SHORT, VERB_BY_INF } from '../data/verbs'
-import { advance, newRound, submit } from '../game/engine'
+import { PERSONS, PERSON_LABEL, PERSON_SHORT, REFLEXIVE_PRONOUN, VERB_BY_INF } from '../data/verbs'
+import { advance, newRound, submit, summarize } from '../game/engine'
 import type { RoundState, SubmitResult } from '../game/engine'
 import { accentDiffs, applyAccentShortcuts, grade } from '../game/grading'
 import { sfx } from '../game/sound'
 import { itemKey } from '../game/storage'
-import type { ItemStat, LevelDef, Question } from '../game/types'
-import { Decomposition, EndingsRow, FormsTable, GroupChip, VerbWord } from './common'
+import type { Grade, ItemStat, LevelDef, Question } from '../game/types'
+import { Decomposition, EndingsRow, FormsTable, GroupChip, VerbWord, fmtPoints } from './common'
 import { useEnterKey } from './useEnterKey'
 
-export type StatUpdate = { key: string; stat: ItemStat } | null
+export type StatUpdate = { key: string; stat: ItemStat; grade: Grade } | null
 
 type Props = {
   level: LevelDef
@@ -22,10 +22,11 @@ type Props = {
 }
 
 type Feedback = SubmitResult & { at: number }
-type Splash = 'boss' | 'recovery'
+type Splash = 'boss' | 'exam' | 'recovery'
 
 const CORRECT_MS = 750
 const ALMOST_MS = 1900
+const EXAM_SAVED_MS = 380
 const READ_GUARD_MS = 450
 const ACCENT_KEYS = ['á', 'é', 'í', 'ó', 'ú']
 
@@ -35,6 +36,7 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     statsRef.current = stats
   }, [stats])
 
+  const isExam = level.kind === 'exam'
   const [round, setRound] = useState<RoundState>(() => newRound(level, stats))
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [input, setInput] = useState('')
@@ -42,13 +44,18 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
   const [nudge, setNudge] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  /** egzamin: w trakcie nie zdradzamy, czy odpowiedź była dobra */
+  const hidden = Boolean(isExam && feedback && feedback.record.q.phase === 'main')
+
   const goNext = useCallback(() => {
     if (!feedback) return
     const next = advance(round, level, statsRef.current)
     if (next.xp !== round.xp) onProgress(next.xp - round.xp, next.combo, null)
     const queue: Splash[] = []
     if (feedback.bossDefeated) queue.push('boss')
-    if (round.phase === 'main' && next.phase === 'recovery') queue.push('recovery')
+    if (level.kind === 'exam' && round.phase === 'main' && next.phase !== 'main') queue.push('exam')
+    // egzamin: ekran wyniku ma już przycisk POPRAW BŁĘDY — bez drugiego ekranu
+    if (level.kind !== 'exam' && round.phase === 'main' && next.phase === 'recovery') queue.push('recovery')
     setRound(next)
     setFeedback(null)
     setInput('')
@@ -56,12 +63,15 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     else if (next.phase === 'done') onFinish(next)
   }, [feedback, round, level, onProgress, onFinish])
 
-  // poprawna / prawie → samo idzie dalej; błąd → czeka na Enter
+  // poprawna / prawie / egzamin → samo idzie dalej; błąd → czeka na Enter
   useEffect(() => {
-    if (!feedback || feedback.record.grade === 'wrong') return
-    const t = window.setTimeout(goNext, feedback.record.grade === 'correct' ? CORRECT_MS : ALMOST_MS)
+    if (!feedback) return
+    const g = feedback.record.grade
+    if (!hidden && g === 'wrong') return
+    const ms = hidden ? EXAM_SAVED_MS : g === 'correct' ? CORRECT_MS : ALMOST_MS
+    const t = window.setTimeout(goNext, ms)
     return () => window.clearTimeout(t)
-  }, [feedback, goNext])
+  }, [feedback, goNext, hidden])
 
   useEffect(() => {
     if (!splashes.length) inputRef.current?.focus()
@@ -76,7 +86,7 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     sfx.unlock()
     if (splashes.length) return
     if (feedback) {
-      if (feedback.record.grade !== 'correct' && Date.now() - feedback.at < READ_GUARD_MS) return
+      if (!hidden && feedback.record.grade !== 'correct' && Date.now() - feedback.at < READ_GUARD_MS) return
       goNext()
       return
     }
@@ -87,12 +97,13 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
     }
     const res = submit(round, level, statsRef.current, input)
     const q = res.record.q
-    onProgress(res.state.xp - round.xp, res.state.combo, { key: itemKey(q.verb, q.person), stat: res.stat })
+    onProgress(res.state.xp - round.xp, res.state.combo, { key: itemKey(q.verb, q.person), stat: res.stat, grade: res.record.grade })
     setRound(res.state)
     setFeedback({ ...res, at: Date.now() })
 
     const g = res.record.grade
-    if (res.bossDefeated) sfx.victory()
+    if (isExam && q.phase === 'main') sfx.tick()
+    else if (res.bossDefeated) sfx.victory()
     else if (g === 'wrong') sfx.wrong()
     else if (g === 'almost') sfx.almost()
     else if (res.comboMilestone && res.comboMilestone >= 5) sfx.combo(res.comboMilestone)
@@ -120,8 +131,8 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
 
   const q = round.current
   const bossVerb = level.bossVerb ? VERB_BY_INF[level.bossVerb] : null
-  const g = feedback?.record.grade
-  const waiting = Boolean(feedback && g !== 'correct')
+  const g = hidden ? undefined : feedback?.record.grade
+  const waiting = Boolean(feedback && !hidden && g !== 'correct')
 
   return (
     <div className="screen play">
@@ -130,21 +141,25 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
           ✕
         </button>
         <div className="hud-level">
-          Level {level.id} · {level.code}
+          {isExam ? 'Egzamin próbny' : `Poziom ${level.id} · ${level.code}`}
           {round.phase === 'recovery' && <span className="hud-phase">do poprawy</span>}
         </div>
         <div className="hud-xp">
-          XP <b>{xp}</b>
+          pkt <b>{xp}</b>
         </div>
       </header>
 
-      <div
-        key={`combo-${round.combo}`}
-        className={`combo${round.combo >= 2 ? ' is-on' : ''}${round.combo >= 5 ? ' is-hot' : ''}`}
-        aria-live="polite"
-      >
-        <span aria-hidden="true">🔥</span> COMBO ×{round.combo}
-      </div>
+      {!isExam ? (
+        <div
+          key={`combo-${round.combo}`}
+          className={`combo${round.combo >= 2 ? ' is-on' : ''}${round.combo >= 5 ? ' is-hot' : ''}`}
+          aria-live="polite"
+        >
+          <span aria-hidden="true">🔥</span> SERIA ×{round.combo}
+        </div>
+      ) : round.phase === 'main' && !splashes.length ? (
+        <div className="combo exam-note">bez podpowiedzi · wynik na końcu</div>
+      ) : null}
 
       {bossVerb && (
         <div className={`boss${feedback?.bossHit ? ' is-hit' : ''}${round.bossHp === 0 ? ' is-down' : ''}`}>
@@ -156,7 +171,7 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
             <div
               className="hp"
               role="progressbar"
-              aria-label="HP bossa"
+              aria-label="Życie jefe"
               aria-valuemin={0}
               aria-valuemax={round.bossMaxHp}
               aria-valuenow={round.bossHp}
@@ -166,16 +181,16 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
           </div>
           <span className="hp-num">
             {round.bossHp}
-            <small>/{round.bossMaxHp} HP</small>
+            <small>/{round.bossMaxHp} ❤</small>
           </span>
         </div>
       )}
 
       {splashes[0] === 'boss' && bossVerb ? (
         <SplashCard
-          eyebrow={`Level ${level.id} · boss`}
-          title="BOSS DEFEATED"
-          sub={`${bossVerb.infinitive.toUpperCase()} pokonany · +100 XP`}
+          eyebrow={`Poziom ${level.id} · jefe`}
+          title="¡JEFE DERROTADO!"
+          sub={`${bossVerb.infinitive.toUpperCase()} pokonany · +100 pkt`}
           cta="DALEJ ⏎"
           onContinue={dismissSplash}
         >
@@ -186,6 +201,8 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
             <FormsTable verb={bossVerb.infinitive} />
           </div>
         </SplashCard>
+      ) : splashes[0] === 'exam' ? (
+        <ExamResultSplash round={round} level={level} onContinue={dismissSplash} />
       ) : splashes[0] === 'recovery' ? (
         <SplashCard
           eyebrow="Ostatni etap rundy"
@@ -208,11 +225,12 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
       ) : q ? (
         <>
           <section
-            key={`${q.n}-${g ?? 'ask'}`}
-            className={`plaque plaque-play${g ? ` is-${g}` : ''}`}
+            key={`${q.n}-${hidden ? 'saved' : (g ?? 'ask')}`}
+            className={`plaque plaque-play${g ? ` is-${g}` : ''}${hidden ? ' is-saved' : ''}`}
             aria-live="polite"
           >
             {!feedback && <QuestionFace q={q} level={level} />}
+            {hidden && <SavedFace />}
             {feedback && g === 'correct' && <CorrectFace fb={feedback} />}
             {feedback && g === 'almost' && <AlmostFace fb={feedback} />}
             {feedback && g === 'wrong' && <WrongFace fb={feedback} />}
@@ -227,7 +245,7 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
               onChange={(e) => {
                 if (!feedback) setInput(applyAccentShortcuts(e.target.value))
               }}
-              placeholder={q.kind === 'fix' ? 'poprawna forma…' : 'wpisz formę…'}
+              placeholder={q.kind === 'fix' ? 'poprawna forma…' : VERB_BY_INF[q.verb].reflexive ? 'zaimek + forma…' : 'wpisz formę…'}
               aria-label="Twoja odpowiedź"
               autoComplete="off"
               autoCorrect="off"
@@ -242,7 +260,7 @@ export function Play({ level, stats, xp, onProgress, onFinish, onQuit }: Props) 
               autoFocus
             />
             <button type="submit" className="btn btn-primary answer-enter" onMouseDown={(e) => e.preventDefault()}>
-              {waiting ? 'DALEJ' : 'ENTER'} <span aria-hidden="true">⏎</span>
+              {waiting ? 'DALEJ' : 'SPRAWDŹ'} <span aria-hidden="true">⏎</span>
             </button>
           </form>
 
@@ -275,10 +293,12 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
   const v = VERB_BY_INF[q.verb]
   const tags = (
     <div className="plaque-tags">
+      {level.kind === 'exam' && q.phase === 'main' && <span className="tag tag-exam">egzamin</span>}
       {q.phase === 'recovery' && <span className="tag tag-recovery">do poprawy</span>}
       {q.retry && q.phase === 'main' && <span className="tag tag-retry">↺ wraca błąd</span>}
       {q.kind === 'fix' && <span className="tag tag-fix">✎ napraw błąd</span>}
       {q.kind === 'conjugate' && level.groupHint && <GroupChip group={v.group} />}
+      {q.kind === 'conjugate' && level.groupHint && v.reflexive && <span className="chip chip-se">-SE</span>}
     </div>
   )
   if (q.kind === 'fix') {
@@ -296,8 +316,17 @@ function QuestionFace({ q, level }: { q: Question; level: LevelDef }) {
       <div className="plaque-verb">
         <VerbWord verb={q.verb} colored={level.groupHint} />
       </div>
-      <div className="plaque-meaning">{v.meaning}</div>
+      {level.kind !== 'exam' && <div className="plaque-meaning">{v.meaning}</div>}
       <div className="plaque-person">{PERSON_LABEL[q.person]}</div>
+    </>
+  )
+}
+
+function SavedFace() {
+  return (
+    <>
+      <div className="fb-label saved">zapisane</div>
+      <div className="fb-title saved">✓</div>
     </>
   )
 }
@@ -311,9 +340,9 @@ function CorrectFace({ fb }: { fb: Feedback }) {
       </div>
       {q.kind === 'fix' && <p className="fb-sentence">{q.rightSentence}</p>}
       <div className="fb-xp">
-        +{fb.record.xp} XP{fb.fixedError ? ' · błąd naprawiony!' : ''}
+        +{fb.record.xp} pkt{fb.fixedError ? ' · błąd naprawiony!' : ''}
       </div>
-      {fb.comboMilestone && <div className="fb-combo">COMBO ×{fb.comboMilestone}!</div>}
+      {fb.comboMilestone && <div className="fb-combo">SERIA ×{fb.comboMilestone}!</div>}
     </>
   )
 }
@@ -334,7 +363,7 @@ function AlmostFace({ fb }: { fb: Feedback }) {
       </div>
       {q.kind === 'fix' && <p className="fb-sentence">{q.rightSentence}</p>}
       <p className="fb-hint">Forma dobra — pilnuj akcentu. Skrót: a + ' → á</p>
-      <div className="fb-xp">+{fb.record.xp} XP</div>
+      <div className="fb-xp">+{fb.record.xp} pkt</div>
     </>
   )
 }
@@ -342,7 +371,11 @@ function AlmostFace({ fb }: { fb: Feedback }) {
 function WrongFace({ fb }: { fb: Feedback }) {
   const q = fb.record.q
   const v = VERB_BY_INF[q.verb]
-  const mistakenFor = PERSONS.find((p) => p !== q.person && grade(fb.record.input, v.forms[p]) !== 'wrong')
+  const input = fb.record.input
+  const mistakenFor = PERSONS.find((p) => p !== q.person && grade(input, v.forms[p]) !== 'wrong')
+  // zwrotny bez zaimka: "levanto" zamiast "me levanto"
+  const bare = v.reflexive ? q.answer.split(' ').slice(1).join(' ') : ''
+  const missingPronoun = v.reflexive && !mistakenFor && grade(input, bare) !== 'wrong'
   return (
     <>
       <div className="fb-label bad">Nie tym razem</div>
@@ -355,7 +388,7 @@ function WrongFace({ fb }: { fb: Feedback }) {
       {v.type === 'regular' ? (
         <>
           <Decomposition verb={q.verb} person={q.person} />
-          <EndingsRow group={v.group} highlight={q.person} />
+          <EndingsRow group={v.group} highlight={q.person} reflexive={v.reflexive} />
         </>
       ) : (
         <>
@@ -364,11 +397,17 @@ function WrongFace({ fb }: { fb: Feedback }) {
         </>
       )}
       <p className="fb-your">
-        Twoje: <s>{fb.record.input}</s>
+        Twoje: <s>{input}</s>
         {mistakenFor && (
           <>
             {' '}
             — to forma dla <b>{PERSON_SHORT[mistakenFor]}</b>
+          </>
+        )}
+        {missingPronoun && (
+          <>
+            {' '}
+            — brakuje zaimka <b>{REFLEXIVE_PRONOUN[q.person]}</b>
           </>
         )}
         <span className="fb-later">{q.phase === 'main' ? ' · wróci za chwilę ↺' : ' · jeszcze raz za moment'}</span>
@@ -396,12 +435,13 @@ function ProgressTiles({ round, level }: { round: RoundState; level: LevelDef })
   }
   if (level.kind === 'boss') return null
   const main = round.history.filter((h) => h.q.phase === 'main')
+  const exam = level.kind === 'exam'
   return (
     <div className="progress">
       <div className="tiles" style={{ gridTemplateColumns: `repeat(${level.length}, 1fr)` }}>
         {Array.from({ length: level.length }, (_, i) => {
           const rec = main[i]
-          const cls = rec ? ` is-${rec.grade}` : i === main.length ? ' is-current' : ''
+          const cls = rec ? (exam ? ' is-answered' : ` is-${rec.grade}`) : i === main.length ? ' is-current' : ''
           return <span key={i} className={`tile${cls}`} />
         })}
       </div>
@@ -409,6 +449,53 @@ function ProgressTiles({ round, level }: { round: RoundState; level: LevelDef })
         {main.length}/{level.length}
       </span>
     </div>
+  )
+}
+
+function ExamResultSplash({ round, level, onContinue }: { round: RoundState; level: LevelDef; onContinue: () => void }) {
+  const summary = summarize(round, level)
+  const exam = summary.exam
+  if (!exam) return null
+  const pct = Math.round(summary.score * 100)
+  const hasErrors = round.recoveryTotal > 0
+  return (
+    <SplashCard
+      eyebrow="Egzamin próbny · wynik"
+      title={`${pct}%`}
+      sub={`Ocena orientacyjna: ${exam.grade.value} (${exam.grade.label})`}
+      cta={hasErrors ? 'POPRAW BŁĘDY ⏎' : 'ZAKOŃCZ ⏎'}
+      onContinue={onContinue}
+    >
+      <div className="exam-breakdown">
+        {exam.breakdown.map((b) => (
+          <div key={b.label} className="exam-row">
+            <span className="exam-label">{b.label}</span>
+            <span className="exam-bar" aria-hidden="true">
+              <span
+                className={`exam-fill${b.points / b.total >= 0.7 ? ' is-good' : ' is-weak'}`}
+                style={{ width: `${(b.points / b.total) * 100}%` }}
+              />
+            </span>
+            <span className="exam-num">
+              {fmtPoints(b.points)}/{b.total}
+            </span>
+          </div>
+        ))}
+      </div>
+      {exam.errors.length > 0 && (
+        <ul className="exam-errors">
+          {exam.errors.map((e, i) => (
+            <li key={i}>
+              <span className="exam-prompt">{e.prompt}</span>
+              <span className="exam-fix">
+                <s>{e.input}</s> → <b>{e.answer}</b>
+                {e.grade === 'almost' && <em> (akcent, ½ pkt)</em>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SplashCard>
   )
 }
 

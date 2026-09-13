@@ -29,44 +29,43 @@ export function stripAccents(s: string): string {
     .normalize('NFC')
 }
 
-function gradeWord(word: string, answer: string): Grade {
-  if (word === answer) return 'correct'
-  if (stripAccents(word) === stripAccents(answer)) return 'almost'
-  return 'wrong'
+function tokens(s: string): string[] {
+  return clean(s).split(' ').filter(Boolean)
 }
 
-function words(input: string): string[] {
-  return clean(input)
-    .split(' ')
-    .map((w) => w.trim())
-    .filter(Boolean)
+/** Okno słów z odpowiedzi gracza, które pasuje do formy (dokładnie albo bez akcentów). */
+function matchWindow(input: string, answer: string): { words: string[]; grade: Grade } | null {
+  const target = tokens(answer)
+  const ws = tokens(input)
+  let almost: string[] | null = null
+  for (let i = 0; i + target.length <= ws.length; i++) {
+    const win = ws.slice(i, i + target.length)
+    if (win.every((w, j) => w === target[j])) return { words: win, grade: 'correct' }
+    if (!almost && win.every((w, j) => stripAccents(w) === stripAccents(target[j]))) almost = win
+  }
+  return almost ? { words: almost, grade: 'almost' } : null
 }
 
 /**
- * Ocena odpowiedzi. Akceptuje samą formę ("hablo"), formę z zaimkiem ("yo hablo")
- * albo całe zdanie ("Yo hablo español.") — liczy się najlepiej pasujące słowo.
+ * Ocena odpowiedzi. Akceptuje samą formę ("hablo", "me levanto"), formę z podmiotem ("yo me levanto")
+ * albo całe zdanie ("Yo me levanto a las siete.") — forma musi wystąpić w całości, w tej kolejności.
  */
 export function grade(input: string, answer: string): Grade {
-  const target = answer.normalize('NFC')
-  let best: Grade = 'wrong'
-  for (const w of words(input)) {
-    const g = gradeWord(w, target)
-    if (g === 'correct') return 'correct'
-    if (g === 'almost') best = 'almost'
-  }
-  return best
+  return matchWindow(input, answer)?.grade ?? 'wrong'
 }
 
-/** Najbardziej pasujące słowo z odpowiedzi gracza. */
-export function closestWord(input: string, answer: string): string {
-  const ws = words(input)
-  return ws.find((w) => stripAccents(w) === stripAccents(answer)) ?? ws[ws.length - 1] ?? ''
+/** Fragment odpowiedzi gracza najbliższy poprawnej formie. */
+export function closestMatch(input: string, answer: string): string {
+  const m = matchWindow(input, answer)
+  if (m) return m.words.join(' ')
+  const ws = tokens(input)
+  return ws.slice(-tokens(answer).length).join(' ')
 }
 
-/** Indeksy liter, w których brakuje / jest zły akcent (dla PRAWIE!). */
+/** Indeksy znaków poprawnej formy, w których brakuje / jest zły akcent (dla PRAWIE!). */
 export function accentDiffs(input: string, answer: string): number[] {
-  const a = Array.from(answer.normalize('NFC'))
-  const w = Array.from(closestWord(input, answer))
+  const a = Array.from(clean(answer))
+  const w = Array.from(closestMatch(input, answer))
   const out: number[] = []
   if (w.length !== a.length) return out
   for (let i = 0; i < a.length; i++) if (w[i] !== a[i]) out.push(i)

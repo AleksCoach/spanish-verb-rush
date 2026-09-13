@@ -46,6 +46,10 @@ export const sfx = {
     tone(660, 0, 0.09, 'triangle', 0.07)
     tone(990, 0.07, 0.12, 'triangle', 0.07)
   },
+  /** neutralny dźwięk zapisania odpowiedzi (egzamin) */
+  tick(): void {
+    tone(520, 0, 0.06, 'sine', 0.05)
+  },
   almost(): void {
     tone(620, 0, 0.14, 'triangle', 0.06)
   },

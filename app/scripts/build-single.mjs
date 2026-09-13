@@ -22,7 +22,7 @@ const full = `<!doctype html>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
 <meta name="theme-color" content="#0d1846" />
-<title>Spanish Verb Rush</title>
+<title>¡A conjugar!</title>
 <style>${css}</style>
 </head>
 <body>

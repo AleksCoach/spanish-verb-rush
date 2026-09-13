@@ -21,9 +21,8 @@ export function Login({ onLogin }: Props) {
     <div className="screen login">
       <header className="plaque plaque-brand">
         <p className="brand-eyebrow">Presente de indicativo</p>
-        <h1 className="brand-title">
-          Spanish <span>Verb Rush</span>
-        </h1>
+        <h1 className="brand-title">¡A conjugar!</h1>
+        <p className="brand-sub">hiszpańskie czasowniki</p>
       </header>
 
       {mode.name === 'pick' && (

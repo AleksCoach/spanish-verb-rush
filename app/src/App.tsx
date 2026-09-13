@@ -5,13 +5,14 @@ import { Login } from './components/Login'
 import { Play } from './components/Play'
 import type { StatUpdate } from './components/Play'
 import { Summary } from './components/Summary'
-import { LEVEL_BY_ID, MAX_LEVEL } from './data/levels'
+import { LEVEL_BY_ID, MAX_LEVEL, isUnlocked } from './data/levels'
+import { IDLE_LIMIT_MS, addActivity, answerPatch } from './game/activity'
 import { summarize } from './game/engine'
 import type { RoundState, Summary as SummaryData } from './game/engine'
 import { setSoundEnabled } from './game/sound'
 import { clearSave, emptySave, getActiveProfile, loadSave, setActiveProfile, writeSave } from './game/storage'
 import type { Profile } from './game/storage'
-import type { SaveData } from './game/types'
+import type { LevelBest, SaveData } from './game/types'
 
 type Screen =
   | { name: 'home' }
@@ -42,6 +43,43 @@ export default function App() {
     window.scrollTo(0, 0)
   }, [screen.name, profile])
 
+  // czas aktywny: sekunda liczy się, gdy gra jest na ekranie, a ostatni ruch gracza był ≤ 5 s temu
+  const lastInputRef = useRef(Date.now())
+  const pendingSecRef = useRef(0)
+  useEffect(() => {
+    if (!profile) return
+    const mark = () => {
+      lastInputRef.current = Date.now()
+    }
+    const flush = () => {
+      const sec = pendingSecRef.current
+      if (!sec) return
+      pendingSecRef.current = 0
+      saveRef.current = addActivity(saveRef.current, { activeSec: sec })
+      writeSave(profile.id, saveRef.current)
+      setSave((s) => addActivity(s, { activeSec: sec }))
+    }
+    const tick = window.setInterval(() => {
+      const visible = document.visibilityState === 'visible'
+      if (visible && Date.now() - lastInputRef.current <= IDLE_LIMIT_MS) pendingSecRef.current += 1
+      if (pendingSecRef.current >= 15 || (!visible && pendingSecRef.current > 0)) flush()
+    }, 1000)
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    const events = ['keydown', 'pointerdown', 'touchstart', 'input'] as const
+    events.forEach((e) => window.addEventListener(e, mark, { capture: true, passive: true }))
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      flush()
+      window.clearInterval(tick)
+      events.forEach((e) => window.removeEventListener(e, mark, { capture: true }))
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [profile])
+
   const login = useCallback((p: Profile) => {
     setActiveProfile(p.id)
     setSave(loadSave(p.id))
@@ -63,37 +101,44 @@ export default function App() {
   const goHome = useCallback(() => setScreen({ name: 'home' }), [])
 
   const onProgress = useCallback((xpDelta: number, combo: number, update: StatUpdate) => {
-    setSave((s) => ({
-      ...s,
-      xp: s.xp + xpDelta,
-      bestCombo: Math.max(s.bestCombo, combo),
-      stats: update ? { ...s.stats, [update.key]: update.stat } : s.stats,
-    }))
+    setSave((s) => {
+      const next = {
+        ...s,
+        xp: s.xp + xpDelta,
+        bestCombo: Math.max(s.bestCombo, combo),
+        stats: update ? { ...s.stats, [update.key]: update.stat } : s.stats,
+      }
+      return update ? addActivity(next, answerPatch(update.grade)) : next
+    })
   }, [])
 
   const onFinish = useCallback((round: RoundState) => {
     const level = LEVEL_BY_ID[round.levelId]
     const summary = summarize(round, level)
     const before = saveRef.current
-    const nextId = Math.min(MAX_LEVEL, level.id + 1)
-    const unlockedNow = summary.passed && nextId > before.unlocked
-    setSave((s) => {
-      const prev = s.levels[level.id]
-      return {
-        ...s,
-        unlocked: summary.passed ? Math.max(s.unlocked, nextId) : s.unlocked,
-        bestCombo: Math.max(s.bestCombo, summary.bestCombo),
-        levels: {
-          ...s.levels,
-          [level.id]: {
-            stars: Math.max(prev?.stars ?? 0, summary.stars),
-            bestAccuracy: Math.max(prev?.bestAccuracy ?? 0, summary.accuracy),
-            plays: (prev?.plays ?? 0) + 1,
-            bestCombo: Math.max(prev?.bestCombo ?? 0, summary.bestCombo),
-          },
-        },
-      }
+    const best = (prev: LevelBest | undefined): LevelBest => ({
+      stars: Math.max(prev?.stars ?? 0, summary.stars),
+      bestAccuracy: Math.max(prev?.bestAccuracy ?? 0, summary.score),
+      plays: (prev?.plays ?? 0) + 1,
+      bestCombo: Math.max(prev?.bestCombo ?? 0, summary.bestCombo),
     })
+    const nextLevel = level.id < MAX_LEVEL ? LEVEL_BY_ID[level.id + 1] : null
+    const unlockedNow = Boolean(
+      nextLevel &&
+        !isUnlocked(nextLevel, before) &&
+        isUnlocked(nextLevel, { ...before, levels: { ...before.levels, [level.key]: best(before.levels[level.key]) } }),
+    )
+    setSave((s) =>
+      addActivity(
+        {
+          ...s,
+          bestCombo: Math.max(s.bestCombo, summary.bestCombo),
+          levels: { ...s.levels, [level.key]: best(s.levels[level.key]) },
+          exams: level.kind === 'exam' ? [...s.exams, { at: Date.now(), score: summary.score }].slice(-20) : s.exams,
+        },
+        { rounds: 1, passed: summary.passed ? 1 : 0 },
+      ),
+    )
     setScreen({ name: 'summary', levelId: level.id, summary, unlockedNow })
   }, [])
 
@@ -145,7 +190,8 @@ export default function App() {
           level={LEVEL_BY_ID[screen.levelId]}
           summary={screen.summary}
           unlockedNow={screen.unlockedNow}
-          canNext={screen.levelId < MAX_LEVEL && save.unlocked > screen.levelId}
+          canNext={screen.levelId < MAX_LEVEL && isUnlocked(LEVEL_BY_ID[screen.levelId + 1], save)}
+          exams={save.exams}
           onNext={() => openIntro(screen.levelId + 1)}
           onReplay={() => play(screen.levelId)}
           onHome={goHome}

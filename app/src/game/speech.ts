@@ -11,7 +11,9 @@ function pickVoice(lang: 'pl' | 'es'): SpeechSynthesisVoice | undefined {
   const voices = window.speechSynthesis.getVoices()
   const want = lang === 'es' ? ['es-es', 'es'] : ['pl-pl', 'pl']
   for (const prefix of want) {
-    const v = voices.find((x) => x.lang.toLowerCase().replace('_', '-').startsWith(prefix))
+    const matching = voices.filter((x) => x.lang.toLowerCase().replace('_', '-').startsWith(prefix))
+    // głosy Google brzmią naturalniej niż systemowe (np. Microsoft Adam) — biorę je, gdy są
+    const v = matching.find((x) => x.name.includes('Google')) ?? matching[0]
     if (v) return v
   }
   return undefined

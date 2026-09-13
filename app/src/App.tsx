@@ -229,7 +229,7 @@ export default function App() {
           canNext={screen.levelId < MAX_LEVEL && isUnlocked(LEVEL_BY_ID[screen.levelId + 1], save)}
           exams={save.exams}
           onNext={() => openIntro(screen.levelId + 1)}
-          onReplay={() => play(screen.levelId)}
+          onReplay={() => (screen.summary.passed ? play(screen.levelId) : openIntro(screen.levelId))}
           onHome={goHome}
         />
       )}
